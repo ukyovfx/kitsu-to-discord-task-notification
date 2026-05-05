@@ -16,6 +16,12 @@ type Productions struct {
 	WebhookURL string
 }
 
+// TaskTypeWebhook はタスクタイプ（工程）ごとの送信先 Webhook
+type TaskTypeWebhook struct {
+	TaskType   string `toml:"taskType"`
+	WebhookURL string `toml:"webhookURL"`
+}
+
 // UserMapEntry は Kitsu の名前と Discord ID の紐付け
 type UserMapEntry struct {
 	KitsuName string `toml:"kitsuName"` // Kitsu 上のフルネーム
@@ -55,7 +61,9 @@ type Config struct {
 		EmbedsPerRequests int
 		RequestsPerMinute int
 		WebhookURL        string
-		Productions       []Productions `toml:"productions,omitempty"`
+		UseThreads        bool               `toml:"useThreads"`       // true でタスクごとにスレッドを作成
+		Productions       []Productions      `toml:"productions,omitempty"`
+		TaskTypeWebhooks  []TaskTypeWebhook  `toml:"taskTypeWebhooks,omitempty"` // 工程別 Webhook
 	}
 	Mention     MentionConfig `toml:"mention"`
 	GoogleDrive struct {

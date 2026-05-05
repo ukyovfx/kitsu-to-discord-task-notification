@@ -11,6 +11,7 @@ import (
 	"io/ioutil"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"text/template"
@@ -79,7 +80,14 @@ type Template struct {
 
 // Discord APIのメッセージ作成レスポンス
 type DiscordMessage struct {
-	ID string `json:"id"`
+	ID        string `json:"id"`
+	ChannelID string `json:"channel_id"` // スレッド作成時はここにスレッドIDが入る
+}
+
+// SendResult は SendMessage / SendMessageBunch の戻り値
+type SendResult struct {
+	MessageID string // Discord メッセージID
+	ThreadID  string // Discord スレッドID（UseThreads=true 時のみ）
 }
 
 // containsIgnoreCase reports whether `target` (case-insensitive) is present in `list`.
@@ -162,13 +170,17 @@ func getProcessEmoji(taskType string) string {
 	}
 }
 
-// DeleteMessage は既存のDiscordメッセージを削除する
+// DeleteMessage は既存のDiscordメッセージを削除する。
+// threadID が空でない場合はスレッド内メッセージの削除として処理する。
 // 成功時は true、失敗時は false を返す（失敗してもプロセスは継続）
-func DeleteMessage(webhookURL, messageID string) bool {
+func DeleteMessage(webhookURL, messageID, threadID string) bool {
 	if webhookURL == "" || messageID == "" {
 		return false
 	}
 	deleteURL := fmt.Sprintf("%s/messages/%s", webhookURL, messageID)
+	if threadID != "" {
+		deleteURL += "?thread_id=" + url.QueryEscape(threadID)
+	}
 	req, err := http.NewRequest(http.MethodDelete, deleteURL, nil)
 	if err != nil {
 		slog.Warn("DeleteMessage: failed to build request", "err", err, "messageID", messageID)
@@ -191,54 +203,72 @@ func DeleteMessage(webhookURL, messageID string) bool {
 	return false
 }
 
-// SendMessage は1タスク分のメッセージを送信してメッセージIDを返す
-// 失敗時は空文字列を返す（呼び出し側で判定して旧メッセージ残置等のフォールバックを行う）
-func SendMessage(payload Payload, webhookURL string) string {
-	// ?wait=true をつけることでDiscordがメッセージIDを返してくれる
-	url := webhookURL + "?wait=true"
+// SendMessage は1タスク分のメッセージを送信して SendResult を返す。
+// threadID が空で threadName が非空の場合は新規スレッドを作成する。
+// threadID が非空の場合は既存スレッドに返信する。
+// 失敗時は空の SendResult を返す。
+func SendMessage(payload Payload, webhookURL, threadID, threadName string) SendResult {
+	// URL 組み立て
+	reqURL := webhookURL + "?wait=true"
+	if threadID != "" {
+		reqURL += "&thread_id=" + url.QueryEscape(threadID)
+	} else if threadName != "" {
+		// スレッド名は最大 100 文字
+		if len([]rune(threadName)) > 100 {
+			runes := []rune(threadName)
+			threadName = string(runes[:100])
+		}
+		reqURL += "&thread_name=" + url.QueryEscape(threadName)
+	}
 
 	body, err := json.Marshal(payload)
 	if err != nil {
 		slog.Error("SendMessage: marshal failed", "err", err)
-		return ""
+		return SendResult{}
 	}
 
 	client := &http.Client{Timeout: 15 * time.Second}
-	resp, err := client.Post(url, "application/json", bytes.NewBuffer(body))
+	resp, err := client.Post(reqURL, "application/json", bytes.NewBuffer(body))
 	if err != nil {
 		slog.Error("SendMessage: HTTP post failed", "err", err)
-		return ""
+		return SendResult{}
 	}
 	defer resp.Body.Close()
 
 	respBody, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 		slog.Error("SendMessage: read body failed", "err", err)
-		return ""
+		return SendResult{}
 	}
 
-	// 2xx 以外は失敗扱い。429 のときは Retry-After を見て呼び出し側に空を返す
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		slog.Error("SendMessage: non-2xx response",
 			"status", resp.StatusCode,
 			"retryAfter", resp.Header.Get("Retry-After"),
 			"body", string(respBody))
-		return ""
+		return SendResult{}
 	}
 
 	var msg DiscordMessage
 	if err := json.Unmarshal(respBody, &msg); err != nil {
 		slog.Error("SendMessage: unmarshal failed", "err", err, "body", string(respBody))
-		return ""
+		return SendResult{}
 	}
 
-	return msg.ID
+	result := SendResult{MessageID: msg.ID}
+	// スレッド新規作成時: channel_id がスレッドID になる
+	if threadName != "" && msg.ChannelID != "" {
+		result.ThreadID = msg.ChannelID
+	} else {
+		result.ThreadID = threadID // 既存スレッドはそのまま引き継ぐ
+	}
+	return result
 }
 
-// SendMessageBunch は各タスクを処理してメッセージIDのマップを返す
-// キーはタスクID、値はDiscordメッセージID
-func SendMessageBunch(conf config.Config, data []kitsu.MessagePayload, webHookURL string, previousMessageIDs map[string]string, previousWebhookURLs map[string]string) map[string]string {
-	result := make(map[string]string)
+// SendMessageBunch は各タスクを処理して SendResult のマップを返す
+// キーはタスクID
+func SendMessageBunch(conf config.Config, data []kitsu.MessagePayload, webHookURL string, previousMessageIDs map[string]string, previousWebhookURLs map[string]string, previousThreadIDs map[string]string) map[string]SendResult {
+	result := make(map[string]SendResult)
 
 	for _, elem := range data {
 		var placeholders Template
@@ -398,28 +428,41 @@ func SendMessageBunch(conf config.Config, data []kitsu.MessagePayload, webHookUR
 		}
 		payload.Embeds = []Embed{embed}
 
+		// スレッドモード: 既存スレッドに返信 or 新規スレッドを作成
+		prevThreadID := previousThreadIDs[elem.Task.ID]
+		threadName := ""
+		if conf.Discord.UseThreads && prevThreadID == "" {
+			// 初回のみスレッド名を生成（スレッド作成）
+			threadName = fmt.Sprintf("%s %s/%s - %s",
+				placeholders.ProcessEmoji,
+				placeholders.ParentName,
+				placeholders.TaskName,
+				placeholders.TaskType)
+		}
+
 		// まず新規メッセージを送信。送信成功時のみ旧メッセージを削除する
 		// （順序が逆だと、新規送信失敗時に Discord 上の履歴が消失する）
-		newMessageID := SendMessage(payload, webHookURL)
-		if newMessageID == "" {
+		newResult := SendMessage(payload, webHookURL, prevThreadID, threadName)
+		if newResult.MessageID == "" {
 			// 送信失敗時は旧メッセージを残す。DB の messageID も既存値を維持する
 			slog.Warn("SendMessage failed; keeping previous message", "taskID", elem.Task.ID)
 			if prevMsgID, ok := previousMessageIDs[elem.Task.ID]; ok && prevMsgID != "" {
-				result[elem.Task.ID] = prevMsgID
+				result[elem.Task.ID] = SendResult{MessageID: prevMsgID, ThreadID: prevThreadID}
 			}
 			continue
 		}
 
 		// 送信成功 → 旧メッセージを削除
+		// スレッドモード時はスレッド内の古いメッセージだけ消す（スレッド自体は残す）
 		if prevMsgID, ok := previousMessageIDs[elem.Task.ID]; ok && prevMsgID != "" {
 			prevWebhook := previousWebhookURLs[elem.Task.ID]
 			if prevWebhook == "" {
 				prevWebhook = webHookURL
 			}
-			DeleteMessage(prevWebhook, prevMsgID)
+			DeleteMessage(prevWebhook, prevMsgID, prevThreadID)
 		}
 
-		result[elem.Task.ID] = newMessageID
+		result[elem.Task.ID] = newResult
 	}
 
 	return result

@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"net/http"
 
 	"log"
 	"os"
@@ -275,6 +276,31 @@ func FilterTasks(data []kitsu.MessagePayload, conf config.Config, db *gorm.DB) {
 		}
 	}
 
+	// タスクタイプ（工程）別 Webhook ルーティング
+	// [[discord.taskTypeWebhooks]] で設定した工程を先にルーティングして filtered から除外する
+	type tasksByType struct {
+		WebhookURL   string
+		TasksPayload []kitsu.MessagePayload
+	}
+	ttRoutes := make([]tasksByType, len(conf.Discord.TaskTypeWebhooks))
+	for i, tw := range conf.Discord.TaskTypeWebhooks {
+		ttRoutes[i].WebhookURL = tw.WebhookURL
+	}
+	for f := len(filtered) - 1; f >= 0; f-- {
+		for i, tw := range conf.Discord.TaskTypeWebhooks {
+			if strings.EqualFold(filtered[f].TaskType.TaskType.Name, tw.TaskType) {
+				ttRoutes[i].TasksPayload = append(ttRoutes[i].TasksPayload, filtered[f])
+				filtered = append(filtered[:f], filtered[f+1:]...)
+				break
+			}
+		}
+	}
+	for _, route := range ttRoutes {
+		if len(route.TasksPayload) > 0 {
+			DiscordQueueSend(route.TasksPayload, conf, route.WebhookURL, db)
+		}
+	}
+
 	if len(filtered) > 0 {
 		resp := DiscordQueueSend(filtered, conf, conf.Discord.WebhookURL, db)
 		if conf.Log {
@@ -286,14 +312,18 @@ func FilterTasks(data []kitsu.MessagePayload, conf config.Config, db *gorm.DB) {
 func DiscordQueueSend(data []kitsu.MessagePayload, conf config.Config, webhookURL string, db *gorm.DB) []kitsu.MessagePayload {
 	rl := rate.New(conf.Discord.RequestsPerMinute, time.Minute)
 
-	// 送信前に既存のメッセージIDをDBから収集
+	// 送信前に既存のメッセージID・WebhookURL・スレッドIDをDBから収集
 	previousMessageIDs := make(map[string]string)
 	previousWebhookURLs := make(map[string]string)
+	previousThreadIDs := make(map[string]string)
 	for _, elem := range data {
 		dbResult := model.FindTask(db, elem.Task.ID)
 		if dbResult.DiscordMessageID != "" {
 			previousMessageIDs[elem.Task.ID] = dbResult.DiscordMessageID
 			previousWebhookURLs[elem.Task.ID] = dbResult.WebhookURL
+		}
+		if dbResult.DiscordThreadID != "" {
+			previousThreadIDs[elem.Task.ID] = dbResult.DiscordThreadID
 		}
 	}
 
@@ -307,11 +337,11 @@ func DiscordQueueSend(data []kitsu.MessagePayload, conf config.Config, webhookUR
 			}
 
 			// メッセージ送信してIDを取得
-			newMessageIDs := discord.SendMessageBunch(conf, payload, webhookURL, previousMessageIDs, previousWebhookURLs)
+			newResults := discord.SendMessageBunch(conf, payload, webhookURL, previousMessageIDs, previousWebhookURLs, previousThreadIDs)
 
-			// 新しいメッセージIDをDBに保存
-			for taskID, msgID := range newMessageIDs {
-				if msgID != "" {
+			// 新しいメッセージID・スレッドIDをDBに保存
+			for taskID, res := range newResults {
+				if res.MessageID != "" {
 					var task kitsu.MessagePayload
 					for _, p := range payload {
 						if p.Task.ID == taskID {
@@ -326,8 +356,9 @@ func DiscordQueueSend(data []kitsu.MessagePayload, conf config.Config, webhookUR
 						task.TaskStatus.TaskStatus.ShortName,
 						task.LatestComment.Comment.ID,
 						task.LatestComment.Comment.UpdatedAt,
-						msgID,
+						res.MessageID,
 						webhookURL,
+						res.ThreadID,
 					)
 				}
 			}
@@ -439,6 +470,41 @@ func main() {
 			slog.Info("Done FilterTasks in %s", time.Since(start))
 		}
 	})
+
+	// 毎朝9時（JST）に日次サマリーをメイン Webhook に投稿（C-8）
+	c.AddFunc("0 9 * * *", func() {
+		counts := model.GetStatusCounts(db)
+		if len(counts) == 0 {
+			return
+		}
+		var lines []string
+		for _, sc := range counts {
+			lines = append(lines, fmt.Sprintf("- **%s**: %d件", sc.TaskStatus, sc.Count))
+		}
+		summaryPayload := discord.Payload{
+			Embeds: []discord.Embed{{
+				Title:       "📊 デイリーサマリー",
+				Description: strings.Join(lines, "\n"),
+				Color:       0x3498db,
+			}},
+		}
+		discord.SendMessage(summaryPayload, conf.Discord.WebhookURL, "", "")
+		slog.Info("Daily digest sent")
+	})
+
+	// ヘルスチェック HTTP エンドポイント :8090/health （C-9）
+	go func() {
+		mux := http.NewServeMux()
+		mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			fmt.Fprint(w, `{"status":"ok"}`)
+		})
+		slog.Info("Health check listening on :8090")
+		if err := http.ListenAndServe(":8090", mux); err != nil {
+			slog.Error("Health check server failed", "err", err)
+		}
+	}()
 
 	c.Run()
 }

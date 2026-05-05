@@ -12,6 +12,14 @@ services:
       - ./data/sqlite.db:/app/sqlite.db
     environment:
       - TZ=Asia/Tokyo
+    ports:
+      - "8090:8090"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8090/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
   editor:
     image: filebrowser/filebrowser:latest
     restart: unless-stopped
