@@ -1,0 +1,27 @@
+version: '3.8'
+services:
+  app:
+    build: .
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      - ./conf.toml:/app/conf.toml
+      - ./tpl:/app/tpl
+      - ./data:/app/data
+      - ./data/sqlite.db:/app/sqlite.db
+    environment:
+      - TZ=Asia/Tokyo
+  editor:
+    image: filebrowser/filebrowser:latest
+    restart: unless-stopped
+    env_file:
+      - .env
+    ports:
+      - "8080:80"
+    volumes:
+      - .:/srv
+      - ./data:/database
+    environment:
+      - PUID=1000
+      - PGID=1000

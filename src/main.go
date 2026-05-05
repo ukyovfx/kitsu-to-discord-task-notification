@@ -79,13 +79,11 @@ func MakeKitsuResponse(conf config.Config) []kitsu.MessagePayload {
 
 	wg := waitgroup.NewWaitGroup(conf.Threads)
 
-	// tasks
 	for i := 0; i < len(response); i++ {
 		wg.BlockAdd()
 		go func(i int) {
 			defer wg.Done()
 
-			// Ignore old messages
 			layout := "2006-01-02T15:04:05"
 			taskDate, err := time.Parse(layout, tasks.Each[i].UpdatedAt)
 			if err != nil {
@@ -97,10 +95,8 @@ func MakeKitsuResponse(conf config.Config) []kitsu.MessagePayload {
 				return
 			}
 
-			// Store task
 			response[i].Task.Task = tasks.Each[i]
 
-			// Store task status
 			for _, elem := range taskStatuses.Each {
 				if elem.ID == tasks.Each[i].TaskStatusID {
 					response[i].TaskStatus.TaskStatus = elem
@@ -108,7 +104,6 @@ func MakeKitsuResponse(conf config.Config) []kitsu.MessagePayload {
 				}
 			}
 
-			// Store entity
 			for _, elem := range entities.Each {
 				if elem.ID == tasks.Each[i].EntityID {
 					response[i].Entity.Entity = elem
@@ -116,7 +111,6 @@ func MakeKitsuResponse(conf config.Config) []kitsu.MessagePayload {
 				}
 			}
 
-			// Store entity type
 			for _, elem := range enitityTypes.Each {
 				if elem.ID == response[i].Entity.Entity.EntityTypeID {
 					response[i].EntityType.EntityType = elem
@@ -124,14 +118,12 @@ func MakeKitsuResponse(conf config.Config) []kitsu.MessagePayload {
 				}
 			}
 
-			// Store parent
 			for _, elem := range entities.Each {
 				if elem.ID == response[i].Entity.Entity.ParentID {
 					response[i].Parent.Entity = elem
 				}
 			}
 
-			// Store project
 			for _, elem := range projects.Each {
 				if elem.ID == response[i].Entity.Entity.ProjectID {
 					response[i].Project.Project = elem
@@ -139,7 +131,6 @@ func MakeKitsuResponse(conf config.Config) []kitsu.MessagePayload {
 				}
 			}
 
-			// Store task type
 			for _, elem := range taskTypes.Each {
 				if elem.ID == tasks.Each[i].TaskTypeID {
 					response[i].TaskType.TaskType = elem
@@ -147,7 +138,6 @@ func MakeKitsuResponse(conf config.Config) []kitsu.MessagePayload {
 				}
 			}
 
-			// Store comments
 			if conf.Kitsu.SkipComments == false {
 				var taskComments kitsu.Comments
 				for _, elem := range comments.Each {
@@ -157,7 +147,6 @@ func MakeKitsuResponse(conf config.Config) []kitsu.MessagePayload {
 				}
 
 				if len(taskComments.Each) > 0 {
-					// find the most recent comment in array
 					sort.Slice(taskComments.Each, func(i, j int) bool {
 						layout := "2006-01-02T15:04:05"
 						a, err := time.Parse(layout, taskComments.Each[i].UpdatedAt)
@@ -172,10 +161,8 @@ func MakeKitsuResponse(conf config.Config) []kitsu.MessagePayload {
 					})
 
 					response[i].LatestComment.Comment.Comment = taskComments.Each[0]
-
 				}
 
-				// Store comment author
 				for _, elem := range persons.Each {
 					if len(taskComments.Each) > 0 {
 						if elem.ID == taskComments.Each[0].PersonID {
@@ -186,7 +173,6 @@ func MakeKitsuResponse(conf config.Config) []kitsu.MessagePayload {
 				}
 			}
 
-			// Store assignee
 			if len(tasks.Each[i].Assignees) > 0 {
 				for _, assigneeID := range tasks.Each[i].Assignees {
 					for _, person := range persons.Each {
@@ -204,9 +190,7 @@ func MakeKitsuResponse(conf config.Config) []kitsu.MessagePayload {
 	if conf.Log {
 		log.Printf("Done primary loop in %s", time.Since(start))
 	}
-	//return response
 
-	// Remove empty elems
 	var out []kitsu.MessagePayload
 	for _, elem := range response {
 		if len(elem.Task.Task.ID) > 0 {
@@ -222,10 +206,8 @@ func MakeKitsuResponse(conf config.Config) []kitsu.MessagePayload {
 }
 
 func DumpToFile(data []kitsu.MessagePayload, filename string) {
-
 	file, _ := json.MarshalIndent(data, "", "    ")
 	_ = ioutil.WriteFile("dump/"+filename+".json", file, 0644)
-
 }
 
 func FilterTasks(data []kitsu.MessagePayload, conf config.Config, db *gorm.DB) {
@@ -233,29 +215,22 @@ func FilterTasks(data []kitsu.MessagePayload, conf config.Config, db *gorm.DB) {
 		if conf.Log {
 			fmt.Printf("Nothing to do\n")
 		}
-		//return []kitsu.MessagePayload{}
 	}
 
-	// Filter
 	var filtered []kitsu.MessagePayload
 	for i := 0; i < len(data); i++ {
 
 		dbResult := model.FindTask(db, data[i].Task.ID)
 
-		// DB verify
 		data[i].PreviousStatusName = dbResult.TaskStatus
 
 		if len(dbResult.TaskID) > 0 {
-			// check if status is different or last updated date don't match
 			if dbResult.TaskStatus != data[i].TaskStatus.TaskStatus.ShortName || dbResult.TaskUpdatedAt != data[i].Task.Task.UpdatedAt {
-				// update
 				model.UpdateTask(db, data[i].Task.Task.ID, data[i].Task.Task.UpdatedAt, data[i].TaskStatus.TaskStatus.ShortName, data[i].LatestComment.Comment.ID, data[i].LatestComment.Comment.UpdatedAt)
-
 			} else {
 				continue
 			}
 		} else {
-			// create
 			model.CreateTask(db, data[i].Task.Task.ID, data[i].Task.Task.UpdatedAt, data[i].TaskStatus.TaskStatus.ShortName, data[i].LatestComment.Comment.ID, data[i].LatestComment.Comment.UpdatedAt)
 		}
 
@@ -268,15 +243,12 @@ func FilterTasks(data []kitsu.MessagePayload, conf config.Config, db *gorm.DB) {
 		filtered = append(filtered, data[i])
 	}
 
-	// Split tasks by project (production) name found in conf.toml (fallback to filtered otherwise)
 	type TasksByProject struct {
 		ProjectName  string
 		TasksPayload []kitsu.MessagePayload
 	}
 	tasksByProject := make([]TasksByProject, len(conf.Discord.Productions))
 	for i := 0; i < len(tasksByProject); i++ {
-
-		// Downward loop (https://stackoverflow.com/questions/29005825/how-to-remove-element-of-struct-array-in-loop-in-golang)
 		for f := len(filtered) - 1; f >= 0; f-- {
 			if strings.Contains(strings.ToLower(filtered[f].Project.Name), strings.ToLower(conf.Discord.Productions[i].Production)) {
 				tasksByProject[i].ProjectName = filtered[f].Project.Name
@@ -284,14 +256,12 @@ func FilterTasks(data []kitsu.MessagePayload, conf config.Config, db *gorm.DB) {
 				filtered = append(filtered[:f], filtered[f+1:]...)
 			}
 		}
-
 	}
 
-	// Send to Discord per production URL (see Advanced settings)
 	if len(tasksByProject) > 0 {
 		for i := 0; i < len(tasksByProject); i++ {
 			if len(tasksByProject[i].TasksPayload) > 0 {
-				resp := DiscordQueueSend(tasksByProject[i].TasksPayload, conf, conf.Discord.Productions[i].WebhookURL)
+				resp := DiscordQueueSend(tasksByProject[i].TasksPayload, conf, conf.Discord.Productions[i].WebhookURL, db)
 				if conf.Log {
 					DumpToFile(resp, "discord_payload_taskByProject")
 				}
@@ -299,21 +269,30 @@ func FilterTasks(data []kitsu.MessagePayload, conf config.Config, db *gorm.DB) {
 		}
 	}
 
-	// Send to Discord main webhook which acts as a fallback if no project match with conf.toml Advanced settings
 	if len(filtered) > 0 {
-		resp := DiscordQueueSend(filtered, conf, conf.Discord.WebhookURL)
+		resp := DiscordQueueSend(filtered, conf, conf.Discord.WebhookURL, db)
 		if conf.Log {
 			DumpToFile(resp, "discord_payload_filtered")
 		}
 	}
 }
 
-func DiscordQueueSend(data []kitsu.MessagePayload, conf config.Config, webhookURL string) []kitsu.MessagePayload {
-	// Send
-	rl := rate.New(conf.Discord.RequestsPerMinute, time.Minute) // 50 times per minute
+func DiscordQueueSend(data []kitsu.MessagePayload, conf config.Config, webhookURL string, db *gorm.DB) []kitsu.MessagePayload {
+	rl := rate.New(conf.Discord.RequestsPerMinute, time.Minute)
+
+	// 送信前に既存のメッセージIDをDBから収集
+	previousMessageIDs := make(map[string]string)
+	previousWebhookURLs := make(map[string]string)
+	for _, elem := range data {
+		dbResult := model.FindTask(db, elem.Task.ID)
+		if dbResult.DiscordMessageID != "" {
+			previousMessageIDs[elem.Task.ID] = dbResult.DiscordMessageID
+			previousWebhookURLs[elem.Task.ID] = dbResult.WebhookURL
+		}
+	}
+
 	var payload []kitsu.MessagePayload
 	for i := 0; i < len(data); i++ {
-
 		payload = append(payload, data[i])
 
 		if (i+1)%conf.Discord.EmbedsPerRequests == 0 || (i+1)%len(data) == 0 {
@@ -321,9 +300,33 @@ func DiscordQueueSend(data []kitsu.MessagePayload, conf config.Config, webhookUR
 				log.Printf("Sending bunch of messages: " + strconv.Itoa(len(payload)))
 			}
 
-			discord.SendMessageBunch(conf, payload, webhookURL)
-			payload = nil
+			// メッセージ送信してIDを取得
+			newMessageIDs := discord.SendMessageBunch(conf, payload, webhookURL, previousMessageIDs, previousWebhookURLs)
 
+			// 新しいメッセージIDをDBに保存
+			for taskID, msgID := range newMessageIDs {
+				if msgID != "" {
+					var task kitsu.MessagePayload
+					for _, p := range payload {
+						if p.Task.ID == taskID {
+							task = p
+							break
+						}
+					}
+					model.UpdateTaskWithDiscord(
+						db,
+						taskID,
+						task.Task.Task.UpdatedAt,
+						task.TaskStatus.TaskStatus.ShortName,
+						task.LatestComment.Comment.ID,
+						task.LatestComment.Comment.UpdatedAt,
+						msgID,
+						webhookURL,
+					)
+				}
+			}
+
+			payload = nil
 			rl.Wait()
 		}
 	}
@@ -344,15 +347,12 @@ func main() {
 
 	start := time.Now()
 
-	// Load config
 	conf := config.Read()
 
-	// Debug
 	if conf.Debug {
 		os.Setenv("Debug", "true")
 	}
 
-	// Connect to DB
 	db, err := gorm.Open(sqlite.Open("sqlite.db"), &gorm.Config{
 		Logger: logger.Default.LogMode(logger.Silent),
 	})
@@ -374,48 +374,49 @@ func main() {
 		}
 	}
 
-	// Create Cron
 	c := cron.New(cron.WithChain(
 		cron.DelayIfStillRunning(cron.DefaultLogger),
 	))
 
-	// Kitsu auth
 	token := basicauth.AuthForJWTToken(conf.Kitsu.Hostname+"api/auth/login", conf.Kitsu.Email, conf.Kitsu.Password)
+	if token == "" {
+		slog.Fatal("Initial Kitsu authentication failed — check hostname/email/password in conf.toml")
+	}
 	os.Setenv("KitsuJWTToken", token)
 	if conf.Log {
 		slog.Info("Connected to Kitsu in %s", time.Since(start))
 	}
 
 	c.AddFunc("@every 1h", func() {
-		token := basicauth.AuthForJWTToken(conf.Kitsu.Hostname+"api/auth/login", conf.Kitsu.Email, conf.Kitsu.Password)
-		os.Setenv("KitsuJWTToken", token)
+		newToken := basicauth.AuthForJWTToken(conf.Kitsu.Hostname+"api/auth/login", conf.Kitsu.Email, conf.Kitsu.Password)
+		if newToken == "" {
+			slog.Warn("Kitsu token refresh failed — keeping previous token until next cycle")
+			return
+		}
+		os.Setenv("KitsuJWTToken", newToken)
 		if conf.Log {
 			slog.Info("Got new Kitsu token")
 		}
 	})
 
-	// Request data from Kitsu
 	kitsuResponse := MakeKitsuResponse(conf)
 	if conf.Log {
 		DumpToFile(kitsuResponse, "kitsu_response")
 		slog.Info("Done MakeKitsuResponse in %s", time.Since(start))
 	}
 
-	// Prepare messages to Discord
 	FilterTasks(kitsuResponse, conf, db)
 	if conf.Log {
 		slog.Info("Done FilterTasks in %s", time.Since(start))
 	}
 
 	c.AddFunc("@every "+strconv.Itoa(conf.Kitsu.RequestInterval)+"m", func() {
-		// Request data from Kitsu
 		kitsuResponse := MakeKitsuResponse(conf)
 		if conf.Log {
 			DumpToFile(kitsuResponse, "kitsu_response")
 			slog.Info("Done MakeKitsuResponse in %s", time.Since(start))
 		}
 
-		// Filter tasks
 		FilterTasks(kitsuResponse, conf, db)
 		if conf.Log {
 			slog.Info("Done FilterTasks in %s", time.Since(start))

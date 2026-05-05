@@ -16,6 +16,8 @@ type Task struct {
 	TaskStatus       string
 	CommentID        string
 	CommentUpdatedAt string
+	DiscordMessageID string // Discord に送信したメッセージID
+	WebhookURL       string // 送信先 Webhook URL
 }
 
 func CreateTask(db *gorm.DB, taskID, taskUpdatedAt, taskStatus, commentID, commentUpdatedAt string) {
@@ -29,6 +31,18 @@ func UpdateTask(db *gorm.DB, taskID, taskUpdatedAt, taskStatus, commentID, comme
 	rec.TaskStatus = taskStatus
 	rec.CommentUpdatedAt = commentUpdatedAt
 	rec.CommentID = commentID
+	db.Save(&rec)
+}
+
+func UpdateTaskWithDiscord(db *gorm.DB, taskID, taskUpdatedAt, taskStatus, commentID, commentUpdatedAt, discordMessageID, webhookURL string) {
+	var rec Task
+	db.Where("task_id=?", taskID).Find(&rec)
+	rec.TaskUpdatedAt = taskUpdatedAt
+	rec.TaskStatus = taskStatus
+	rec.CommentUpdatedAt = commentUpdatedAt
+	rec.CommentID = commentID
+	rec.DiscordMessageID = discordMessageID
+	rec.WebhookURL = webhookURL
 	db.Save(&rec)
 }
 

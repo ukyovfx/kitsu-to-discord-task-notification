@@ -206,7 +206,6 @@ func GetComment(objectID string) Comments {
 func GetTasks() Tasks {
 	path := config.Read().Kitsu.Hostname + "api/data/tasks?relations=true"
 	response := Tasks{}
-	println(os.Getenv("KitsuJWTToken"))
 	request.Do(os.Getenv("KitsuJWTToken"), http.MethodGet, path, nil, &response.Each)
 
 	return response

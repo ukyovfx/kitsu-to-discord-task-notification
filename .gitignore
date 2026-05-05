@@ -28,3 +28,12 @@ tests.bat
 /dump
 /logs/*
 *.zip
+
+# Environment / secrets — never commit
+.env
+.env.local
+
+# Runtime data — never commit
+/data/*.db
+/data/sqlite.db
+/data/filebrowser.db
