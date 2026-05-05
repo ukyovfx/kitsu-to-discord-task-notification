@@ -5,6 +5,7 @@ import (
 	"io/ioutil"
 	"os"
 	"strings"
+	"unicode"
 
 	"github.com/gookit/slog"
 	"github.com/naoina/toml"
@@ -86,6 +87,77 @@ func Read() Config {
 		slog.Fatal(err)
 	}
 	return config
+}
+
+// Validate は設定内容を検査して問題のある項目を文字列スライスで返す。
+// 致命的な必須フィールド未設定から、プレースホルダが残っているだけの警告レベルまで含む。
+// 呼び出し側は返り値をループして slog.Warn / slog.Error 等で出力する。
+func (c *Config) Validate() []string {
+	var issues []string
+
+	// --- 必須フィールド ---
+	if strings.TrimSpace(c.Kitsu.Hostname) == "" {
+		issues = append(issues, "[FATAL] kitsu.hostname is empty — set it in conf.toml")
+	}
+	if strings.TrimSpace(c.Kitsu.Email) == "" {
+		issues = append(issues, "[FATAL] kitsu.email is empty — set it in conf.toml")
+	}
+	if strings.TrimSpace(c.Kitsu.Password) == "" {
+		issues = append(issues, "[FATAL] kitsu.password is empty — set KITSU_PASSWORD env var or fill in conf.toml")
+	}
+	if strings.TrimSpace(c.Discord.WebhookURL) == "" {
+		issues = append(issues, "[FATAL] discord.webhookURL is empty — set DISCORD_WEBHOOK_URL env var or fill in conf.toml")
+	}
+
+	// --- テンプレートプレースホルダ検出 ---
+	for _, u := range c.Mention.UserMap {
+		if looksLikePlaceholder(u.KitsuName) {
+			issues = append(issues, "[WARN] mention.userMap: kitsuName looks like a placeholder — update it: "+u.KitsuName)
+		}
+		if looksLikePlaceholder(u.DiscordID) {
+			issues = append(issues, "[WARN] mention.userMap: discordID looks like a placeholder for kitsuName="+u.KitsuName+" — update it: "+u.DiscordID)
+		}
+	}
+	for _, ch := range c.Mention.Checkers {
+		if looksLikePlaceholder(ch.DiscordID) {
+			issues = append(issues, "[WARN] mention.checkers: discordID looks like a placeholder for taskType="+ch.TaskType+" — update it: "+ch.DiscordID)
+		}
+	}
+
+	return issues
+}
+
+// looksLikePlaceholder は文字列がプレースホルダ（未設定値）らしいかどうかを返す。
+// 判定基準:
+//   - 日本語（CJK/ひらがな/カタカナ等）を含む → テンプレートの日本語説明文
+//   - "000000000000000000" や "222222222222222222" など明らかなダミー Discord ID
+func looksLikePlaceholder(s string) bool {
+	if s == "" {
+		return false // 空は別途必須チェックで拾う
+	}
+	for _, r := range s {
+		// ひらがな / カタカナ / CJK統合漢字 / CJK記号 など
+		if unicode.In(r,
+			unicode.Hiragana,
+			unicode.Katakana,
+			unicode.Han,
+		) {
+			return true
+		}
+	}
+	// よく使われるダミー Discord ID パターン
+	knownDummies := []string{
+		"222222222222222222",
+		"000000000000000000",
+		"111111111111111111",
+		"999999999999999999",
+	}
+	for _, d := range knownDummies {
+		if s == d {
+			return true
+		}
+	}
+	return false
 }
 
 // expandEnvBraces replaces ${VAR} occurrences with the value of the environment

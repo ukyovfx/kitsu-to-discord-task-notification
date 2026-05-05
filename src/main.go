@@ -349,6 +349,17 @@ func main() {
 
 	conf := config.Read()
 
+	// 起動時に設定ファイルの問題を検出してログに出す
+	if issues := conf.Validate(); len(issues) > 0 {
+		for _, msg := range issues {
+			if strings.HasPrefix(msg, "[FATAL]") {
+				slog.Error("config validation: " + msg)
+			} else {
+				slog.Warn("config validation: " + msg)
+			}
+		}
+	}
+
 	if conf.Debug {
 		os.Setenv("Debug", "true")
 	}

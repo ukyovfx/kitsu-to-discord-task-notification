@@ -25,25 +25,33 @@ func CreateTask(db *gorm.DB, taskID, taskUpdatedAt, taskStatus, commentID, comme
 }
 
 func UpdateTask(db *gorm.DB, taskID, taskUpdatedAt, taskStatus, commentID, commentUpdatedAt string) {
-	var rec Task
-	db.Where("task_id=?", taskID).Find(&rec)
-	rec.TaskUpdatedAt = taskUpdatedAt
-	rec.TaskStatus = taskStatus
-	rec.CommentUpdatedAt = commentUpdatedAt
-	rec.CommentID = commentID
-	db.Save(&rec)
+	_ = db.Transaction(func(tx *gorm.DB) error {
+		var rec Task
+		if err := tx.Where("task_id = ?", taskID).First(&rec).Error; err != nil {
+			return err
+		}
+		rec.TaskUpdatedAt = taskUpdatedAt
+		rec.TaskStatus = taskStatus
+		rec.CommentUpdatedAt = commentUpdatedAt
+		rec.CommentID = commentID
+		return tx.Save(&rec).Error
+	})
 }
 
 func UpdateTaskWithDiscord(db *gorm.DB, taskID, taskUpdatedAt, taskStatus, commentID, commentUpdatedAt, discordMessageID, webhookURL string) {
-	var rec Task
-	db.Where("task_id=?", taskID).Find(&rec)
-	rec.TaskUpdatedAt = taskUpdatedAt
-	rec.TaskStatus = taskStatus
-	rec.CommentUpdatedAt = commentUpdatedAt
-	rec.CommentID = commentID
-	rec.DiscordMessageID = discordMessageID
-	rec.WebhookURL = webhookURL
-	db.Save(&rec)
+	_ = db.Transaction(func(tx *gorm.DB) error {
+		var rec Task
+		if err := tx.Where("task_id = ?", taskID).First(&rec).Error; err != nil {
+			return err
+		}
+		rec.TaskUpdatedAt = taskUpdatedAt
+		rec.TaskStatus = taskStatus
+		rec.CommentUpdatedAt = commentUpdatedAt
+		rec.CommentID = commentID
+		rec.DiscordMessageID = discordMessageID
+		rec.WebhookURL = webhookURL
+		return tx.Save(&rec).Error
+	})
 }
 
 func FindTask(db *gorm.DB, taskID string) Task {

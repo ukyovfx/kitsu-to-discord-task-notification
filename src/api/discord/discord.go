@@ -54,7 +54,6 @@ type Template struct {
 	ParentName     string
 	TaskName       string
 	TaskType       string
-	SubTaskName    string
 	CurrentStatus  string
 	PreviousStatus string
 	CommentContent string
@@ -74,6 +73,33 @@ type Template struct {
 // Discord APIのメッセージ作成レスポンス
 type DiscordMessage struct {
 	ID string `json:"id"`
+}
+
+// containsIgnoreCase reports whether `target` (case-insensitive) is present in `list`.
+func containsIgnoreCase(list []string, target string) bool {
+	for _, s := range list {
+		if strings.EqualFold(s, target) {
+			return true
+		}
+	}
+	return false
+}
+
+// statusMessageInfo returns the Japanese message text and emoji for a given status.
+// Returns ("", "📌") for statuses we don't have a tailored message for.
+func statusMessageInfo(status string) (string, string) {
+	switch strings.ToUpper(status) {
+	case "WFA":
+		return "チェックをお願いします", "👀"
+	case "RETAKE":
+		return "作業をお願いします！", "🔃"
+	case "DONE":
+		return "チェックが完了しました。お疲れ様でした！", "✅"
+	case "READY":
+		return "作業を開始してください", "🟢"
+	default:
+		return "", "📌"
+	}
 }
 
 // 工程ごとのアイコン
@@ -200,19 +226,35 @@ func SendMessageBunch(conf config.Config, data []kitsu.MessagePayload, webHookUR
 		placeholders.EntityType = elem.EntityType.EntityType.Name
 		placeholders.ProcessEmoji = getProcessEmoji(elem.TaskType.Name)
 
-		// Assignees を解決しつつ、アーティストの Discord ID も収集
+		// Assignees を解決しつつ、アーティストの Discord ID も収集。
+		// 同じ Kitsu 名が userMap に複数行で書かれていても 1 回しか mention しないよう、
+		// 既に追加した DiscordID を seen で重複排除する。
 		var assigneeNames []string
 		var artistMentions []string
+		seenDiscordID := make(map[string]bool)
 		placeholders.Assignees = make([]Assignee, len(elem.Assignees))
 		for i := 0; i < len(elem.Assignees); i++ {
-			placeholders.Assignees[i].Fullname = elem.Assignees[i].FullName
+			fullName := elem.Assignees[i].FullName
+			placeholders.Assignees[i].Fullname = fullName
 			placeholders.Assignees[i].Email = elem.Assignees[i].Email
-			assigneeNames = append(assigneeNames, elem.Assignees[i].FullName)
+			assigneeNames = append(assigneeNames, fullName)
 
+			matched := false
 			for _, u := range conf.Mention.UserMap {
-				if u.KitsuName == elem.Assignees[i].FullName {
-					artistMentions = append(artistMentions, "<@"+u.DiscordID+">")
+				if u.KitsuName == fullName {
+					if !seenDiscordID[u.DiscordID] {
+						artistMentions = append(artistMentions, "<@"+u.DiscordID+">")
+						seenDiscordID[u.DiscordID] = true
+					}
+					matched = true
+					break
 				}
+			}
+			if !matched && len(conf.Mention.UserMap) > 0 {
+				slog.Warn("Kitsu user not in mention.userMap; will not be @-mentioned",
+					"kitsuName", fullName,
+					"taskID", elem.Task.ID,
+					"hint", "add this person to [[mention.userMap]] in conf.toml")
 			}
 		}
 		if len(assigneeNames) > 0 {
@@ -230,30 +272,30 @@ func SendMessageBunch(conf config.Config, data []kitsu.MessagePayload, webHookUR
 			}
 		}
 
-		// ステータスごとにメンションと文言を決定
+		// ステータスごとのメンション対象を conf.Mention の設定から決める。
+		// CheckerStatuses に含まれるステータスではチェッカーをメンション、
+		// ArtistStatuses に含まれるステータスではアーティスト全員をメンションする。
+		// 両方に含まれるステータスでは両者を併記する。
 		currentStatus := strings.ToUpper(elem.TaskStatus.ShortName)
-		mentionContent := ""
-		statusMessage := ""
-		statusEmoji := "📌"
-
-		switch currentStatus {
-		case "WFA":
-			mentionContent = checkerMention
-			statusMessage = "チェックをお願いします"
-			statusEmoji = "👀"
-		case "RETAKE":
-			mentionContent = strings.Join(artistMentions, " ")
-			statusMessage = "作業をお願いします！"
-			statusEmoji = "🔃"
-		case "DONE":
-			mentionContent = strings.Join(artistMentions, " ")
-			statusMessage = "チェックが完了しました。お疲れ様でした！"
-			statusEmoji = "✅"
-		case "READY":
-			mentionContent = strings.Join(artistMentions, " ")
-			statusMessage = "作業を開始してください"
-			statusEmoji = "🟢"
+		var mentionParts []string
+		if containsIgnoreCase(conf.Mention.CheckerStatuses, currentStatus) {
+			if checkerMention != "" {
+				mentionParts = append(mentionParts, checkerMention)
+			} else if len(conf.Mention.Checkers) > 0 {
+				slog.Warn("No checker configured for task type; checker will not be @-mentioned",
+					"taskType", elem.TaskType.Name,
+					"status", currentStatus,
+					"taskID", elem.Task.ID,
+					"hint", "add this task type to [[mention.checkers]] in conf.toml")
+			}
 		}
+		if containsIgnoreCase(conf.Mention.ArtistStatuses, currentStatus) {
+			if artistJoined := strings.Join(artistMentions, " "); artistJoined != "" {
+				mentionParts = append(mentionParts, artistJoined)
+			}
+		}
+		mentionContent := strings.Join(mentionParts, " ")
+		statusMessage, statusEmoji := statusMessageInfo(currentStatus)
 
 		placeholders.MentionContent = mentionContent
 		placeholders.StatusMessage = statusMessage
