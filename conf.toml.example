@@ -1,0 +1,74 @@
+# ============================================================
+# conf.toml.example — 設定ファイルのテンプレート
+# 使い方: cp conf.toml.example conf.toml  →  各値を編集する
+# ============================================================
+
+tplPreset              = "rich"  # tpl/ 配下のサブフォルダ名
+ignoreMessagesDaysOld  = 5       # 0 = 全件対象
+silentUpdateDB         = false   # true = DBのみ更新して Discord に送信しない
+threads                = 12
+debug                  = false
+log                    = true
+
+[kitsu]
+    hostname        = "http://YOUR_KITSU_HOST/"  # 末尾スラッシュ必須
+    email           = "your_kitsu_email@example.com"
+    password        = "${KITSU_PASSWORD}"         # .env で KITSU_PASSWORD=xxx を設定
+    skipComments    = false
+    requestInterval = 1  # ポーリング間隔（分）
+
+[discord]
+    embedsPerRequests  = 10   # 最大 10
+    RequestsPerMinute  = 50   # 最大 50
+    webhookURL         = "${DISCORD_WEBHOOK_URL}"  # .env で DISCORD_WEBHOOK_URL=xxx を設定
+    useThreads         = false  # true にするとタスクごとにスレッドを作成
+
+# プロジェクト別に送信先チャンネルを分けたい場合（任意）
+#[[discord.productions]]
+#    production = "ProjectA"
+#    webhookURL = "https://discord.com/api/webhooks/..."
+
+# 工程（タスクタイプ）別に送信先チャンネルを分けたい場合（任意）
+#[[discord.taskTypeWebhooks]]
+#    taskType   = "Animation"
+#    webhookURL = "https://discord.com/api/webhooks/..."
+
+# ============================================================
+# メンション設定
+# ============================================================
+
+[mention]
+    # これらのステータスになったときチェッカーをメンション
+    checkerStatuses = ["WFA"]
+
+    # これらのステータスになったときアーティストをメンション
+    artistStatuses = ["READY", "RETAKE", "DONE"]
+
+    # 緊急ステータス → @here でチャンネル全員に通知（不要なら空のまま）
+    hereStatuses = []
+
+# Kitsu フルネーム → Discord ユーザーID のマッピング
+# Kitsu の「メンバー」ページに表示される名前と完全一致させること
+[[mention.userMap]]
+    kitsuName = "Taro Yamada"
+    discordID = "123456789012345678"
+
+#[[mention.userMap]]
+#    kitsuName = "Hanako Suzuki"
+#    discordID = "234567890123456789"
+
+# タスクタイプ（工程）ごとのチェッカー Discord ID
+[[mention.checkers]]
+    taskType  = "Animation"
+    discordID = "345678901234567890"
+
+#[[mention.checkers]]
+#    taskType  = "Compositing"
+#    discordID = "456789012345678901"
+
+# ============================================================
+# Google Drive リンク（テンプレートで {{.GoogleDriveURL}} として使用）
+# ============================================================
+
+[googleDrive]
+    url = "https://drive.google.com/drive/folders/YOUR_FOLDER_ID"

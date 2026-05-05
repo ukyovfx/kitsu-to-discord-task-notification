@@ -1,73 +1,202 @@
-![Kitsu (CGWire) automatic notifications to Discord](https://raw.githubusercontent.com/keshon/assets/main/kitsu-to-discord-task-notification/header.jpeg)
+# Kitsu × Discord リッチ通知システム
 
-This app automatically sends task status notifications from Kitsu tracker to Discord using a simple schedule. Discord messages can be customized via simple template engine (check /tpl dir).
+> Kitsu のタスクステータス変更を Discord に自動通知する Bot。  
+> VFX・アニメ制作チーム向けに日本語対応・メンション・プレビュー画像表示に対応。
 
-<kbd>![# Demo](https://raw.githubusercontent.com/keshon/assets/main/kitsu-to-discord-task-notification/demo.gif)</kbd>
+[English](#english) | [日本語](#日本語)
 
+---
 
-## Quick run
-Download the latest version (only Windows for now), fill in conf.toml and run it.
+## 日本語
 
-### Configuration (conf.toml)
-#### Basic
-| Variables | Description |
-| - | - |
-|tplPreset| Name of a subfolder (inside `/tpl`) that contains template files for styling Discord message. Useful for different customizations.
-| ignoreMessagesDaysOld | Don't parse tasks from Kitsu older that this value (days). |
-| silentUpdateDB | Update local database but dont post anything. Useful for the first run. |
-| threads | Increase value to speed up proccesing parsed data - little to no benefit for now |
-| debug | Print Kitsu response data to shell |
-| log | Print additional information to shell |
-#### Kitsu
-| Variables | Description |
-| - | - |
-| hostname | Kitsu hostname like https://example.com/ - trailing slash is required. |
-| email | Kitsu account email - account must have `Studio manager` privileges. |
-| password | Account password. |
-| skipComments | Comments create overhead - skip them if you don't need them. |
-| requestInterval | How often (in minutes) to request data from kitsu and publish it to Discord. |
-#### Discord
-| Variables | Description |
-| - | - |
-| embedsPerRequests | How many messages (embeds) are in one post in the chat. 10 maximum |
-| RequestsPerMinute | How many posts (with messages) per minute can be made. 50 maximum |
-| webhookURL | Discord webhook URL address |
+### 概要
 
-### Templating (tpl dir)
-The Discord message can be changed using the template files found in the `\tpl` directory.
-Each file corresponds to a different element in the Discord embedding structure, and each file has access to the following variables:
+[Kitsu](https://www.cg-wire.com/) のポーリング（デフォルト1分間隔）でタスクの状態変化を検知し、Discord Webhook でリッチ通知を送信します。
 
-| Variables | Description |
-| - | - |
-| `{{.ProjectName}}` | Production name. |
-| `{{.ParentName}}` | Task parent name: can be scenes name or asset type name. |
-| `{{.TaskName}}` | Task name |
-| `{{.TaskType}}` | Task type |
-| `{{.CurrentStatus}}` | Current task type status (got from Kitsu) |
-| `{{.PreviousStatus}}` | Previous tast type status (got from local database) |
-| `{{.CommentContent}}` | Comment message |
-| `{{.CommentAuthor}}` | Comment author |
-| `{{.EntityType}}` | Entity type name |
+**主な機能:**
+- 🔔 ステータス変更・コメント追加を自動検知
+- 👤 担当者・チェッカーへの @メンション（conf.toml で設定）
+- 📸 Kitsu プレビュー画像を Discord に表示（nginx 設定が必要、後述）
+- 🧵 タスクごとのスレッド作成（`useThreads = true`）
+- 📊 工程別・プロジェクト別チャンネルへの振り分け
+- 🚨 緊急ステータスで `@here` 通知
+- 📅 毎朝9時の日次サマリー
+- 🏥 ヘルスチェックエンドポイント（`:8090/health`）
+- 🔁 Kitsu API 障害時の自動リトライ（指数バックオフ）
 
-## Compilation
-Compilation is straight forward: 
+### 必要環境
+
+- Docker + Docker Compose
+- Kitsu サーバー（self-hosted または Zou/CGWire cloud）
+- Discord サーバーの Webhook URL
+
+### セットアップ
+
 ```bash
-go build -ldflags "-s -w" -o app.exe src/main.go
+# 1. リポジトリをクローン
+git clone https://github.com/YOUR_USERNAME/kitsu-discord-rich-notification.git
+cd kitsu-discord-rich-notification
+
+# 2. 設定ファイルを作成
+cp conf.toml.example conf.toml
+cp .env.example .env
+
+# 3. .env を編集（パスワード・Webhook URL）
+nano .env
+
+# 4. conf.toml を編集（Kitsu ホスト・チームメンバー設定）
+nano conf.toml
+
+# 5. 起動
+docker-compose up -d
+
+# 6. ログ確認
+docker-compose logs -f app
 ```
-## Docker
-To deploy app via Docker:
-1. docker-compose and Traefik is installed
-2. Go to `deploy` dir
-3. Update kitsu hostname in `.evn` file.
-4. `bash run.sh` - exec supplied shell script that will download latest sources, build Docker image and run it via docker-compose.
 
-## What is Kitsu?
-Kitsu is a production task tracker for small to midsize animation studios made by CG Wire company based in France.
+### conf.toml 主要設定
 
-The software is lightweight and simple with the easiest learning curve of the competition and it provides all nessesary tools to get the job done.
+| キー | 説明 |
+|------|------|
+| `kitsu.hostname` | Kitsu サーバーの URL（末尾スラッシュ必須） |
+| `discord.webhookURL` | 通知先 Discord Webhook URL |
+| `discord.useThreads` | `true` でタスクごとにスレッドを作成 |
+| `mention.checkerStatuses` | チェッカーをメンションするステータス（例: `["WFA"]`） |
+| `mention.artistStatuses` | アーティストをメンションするステータス |
+| `mention.hereStatuses` | `@here` を送るステータス（緊急用、空でも可） |
+| `[[mention.userMap]]` | Kitsu フルネーム → Discord ユーザーID の紐付け |
+| `[[mention.checkers]]` | タスクタイプ → チェッカー Discord ID |
+| `[[discord.taskTypeWebhooks]]` | 工程別チャンネル振り分け |
+| `[[discord.productions]]` | プロジェクト別チャンネル振り分け |
 
-Visit [cg-wire.com](https://cg-wire.com) for more information.
+詳細は `conf.toml.example` のコメントを参照してください。
 
-Official [Discord server](https://discord.com/invite/VbCxtKN)
+### プレビュー画像表示（オプション）
 
-[![CGWire Logo](https://zou.cg-wire.com/cgwire.png)](https://cgwire.com)
+Kitsu 前段の nginx に以下の `location` を追加すると Discord に画像が表示されます：
+
+```nginx
+# プレビューファイルのみ認証なしで公開（UUID で推測困難）
+location ~ ^/api/pictures/preview-files/ {
+    proxy_pass http://localhost:5000;  # Kitsu バックエンドのポートに合わせる
+    proxy_set_header Host $host;
+}
+```
+
+```bash
+sudo nginx -t && sudo systemctl reload nginx
+```
+
+> ⚠️ プレビュー URL は UUID で推測困難ですが、Discord チャンネル自体のアクセス制御を必ず設定してください。社内素材が外部に漏洩しないよう注意。
+
+### ディレクトリ構成
+
+```
+├── conf.toml.example      # 設定テンプレート
+├── .env.example           # 環境変数テンプレート
+├── docker-compose.yml
+├── Dockerfile
+├── tpl/
+│   └── rich/              # Discord メッセージテンプレート（Go text/template）
+│       ├── author.tpl
+│       ├── title.tpl
+│       ├── description.tpl
+│       ├── fields.tpl
+│       └── footer.tpl
+└── src/
+    ├── main.go
+    ├── api/
+    │   ├── kitsu/         # Kitsu API クライアント
+    │   └── discord/       # Discord Webhook 送信
+    ├── model/             # SQLite モデル（GORM）
+    └── utils/
+        ├── config/        # TOML 設定・${VAR} 環境変数展開
+        ├── request/       # HTTP クライアント（リトライ+バックオフ）
+        └── truncate/
+```
+
+### 運用コマンド
+
+```bash
+# ログ確認
+docker-compose logs -f app
+
+# 設定変更後の再起動（conf.toml, .env を変えたとき）
+docker-compose restart app
+
+# コードを含む完全再ビルド
+docker-compose down && docker-compose up -d --build
+
+# ヘルスチェック確認
+curl http://localhost:8090/health
+# → {"status":"ok"}
+
+# コンテナの状態確認
+docker-compose ps
+```
+
+### トラブルシューティング
+
+| 症状 | 確認箇所 |
+|------|----------|
+| 通知が来ない | `docker-compose logs app` でエラーを確認 |
+| メンションされない | `[[mention.userMap]]` に全員分の Discord ID があるか確認 |
+| 起動時に `[WARN] placeholder` が出る | `conf.toml` のプレースホルダを実際の値に書き換える |
+| 画像が表示されない | nginx の preview-files location を設定済みか確認 |
+| `Initial Kitsu authentication failed` | hostname / email / password を確認 |
+
+---
+
+## English
+
+### Overview
+
+Polls [Kitsu](https://www.cg-wire.com/) every minute, detects task status changes, and posts rich Discord notifications. Built for Japanese VFX/animation studios but works with any Kitsu setup.
+
+**Features:**
+- 🔔 Auto-detect status changes and new comments
+- 👤 @mention assignees and checkers, configurable per status
+- 📸 Show Kitsu preview thumbnails in Discord (requires nginx setup)
+- 🧵 Per-task Discord threads (`useThreads = true`)
+- 📊 Route notifications by project or task type to separate channels
+- 🚨 `@here` mention for urgent statuses
+- 📅 Daily digest at 9 AM (JST)
+- 🏥 Health check at `:8090/health`
+- 🔁 Automatic retry with exponential backoff on Kitsu API failures
+
+### Quick Start
+
+```bash
+git clone https://github.com/YOUR_USERNAME/kitsu-discord-rich-notification.git
+cd kitsu-discord-rich-notification
+
+cp conf.toml.example conf.toml
+cp .env.example .env
+# Fill in .env (Kitsu password + Discord webhook URL)
+# Edit conf.toml (Kitsu hostname, team members, mention settings)
+
+docker-compose up -d
+docker-compose logs -f app
+```
+
+Secrets go in `.env` only — never in `conf.toml`. See `conf.toml.example` for all available options with inline comments.
+
+### Architecture
+
+```
+Kitsu API ──(poll every N min)──► Go app ──► Discord Webhook
+                                     │
+                                   SQLite (change detection)
+```
+
+The app stores task state in SQLite. On each poll it compares the stored state to the current Kitsu state and only sends a Discord message when something changed (status, timestamp, or latest comment).
+
+---
+
+## Credits
+
+Forked from [keshon/kitsu-to-discord-task-notification](https://github.com/keshon/kitsu-to-discord-task-notification) and heavily extended for Japanese VFX/animation production workflows.
+
+## License
+
+MIT — see [LICENSE](LICENSE).
