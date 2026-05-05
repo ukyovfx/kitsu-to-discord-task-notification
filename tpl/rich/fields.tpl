@@ -1,3 +1,4 @@
+[
   {
     "name": "📁 カテゴリ",
     "value": "{{.ProjectName}}",

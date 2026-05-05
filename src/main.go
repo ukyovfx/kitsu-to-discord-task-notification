@@ -225,7 +225,13 @@ func FilterTasks(data []kitsu.MessagePayload, conf config.Config, db *gorm.DB) {
 		data[i].PreviousStatusName = dbResult.TaskStatus
 
 		if len(dbResult.TaskID) > 0 {
-			if dbResult.TaskStatus != data[i].TaskStatus.TaskStatus.ShortName || dbResult.TaskUpdatedAt != data[i].Task.Task.UpdatedAt {
+			statusChanged := dbResult.TaskStatus != data[i].TaskStatus.TaskStatus.ShortName
+			timestampChanged := dbResult.TaskUpdatedAt != data[i].Task.Task.UpdatedAt
+			commentChanged := dbResult.CommentUpdatedAt != data[i].LatestComment.Comment.UpdatedAt
+
+			if statusChanged || timestampChanged || commentChanged {
+				// コメントのみ変化（ステータス・タイムスタンプは同じ）かどうかを記録
+				data[i].IsCommentOnly = commentChanged && !statusChanged && !timestampChanged
 				model.UpdateTask(db, data[i].Task.Task.ID, data[i].Task.Task.UpdatedAt, data[i].TaskStatus.TaskStatus.ShortName, data[i].LatestComment.Comment.ID, data[i].LatestComment.Comment.UpdatedAt)
 			} else {
 				continue

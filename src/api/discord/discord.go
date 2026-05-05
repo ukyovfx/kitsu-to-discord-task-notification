@@ -28,6 +28,9 @@ type EmbedField struct {
 	Value  string `json:"value"`
 	Inline bool   `json:"inline"`
 }
+type EmbedImage struct {
+	URL string `json:"url"`
+}
 type Embed struct {
 	Description string       `json:"description,omitempty"`
 	Title       string       `json:"title,omitempty"`
@@ -36,6 +39,7 @@ type Embed struct {
 	Author      EmbedAuthor  `json:"author,omitempty"`
 	Footer      EmbedFooter  `json:"footer,omitempty"`
 	Fields      []EmbedField `json:"fields,omitempty"`
+	Image       *EmbedImage  `json:"image,omitempty"`
 }
 type Payload struct {
 	Username  string  `json:"username,omitempty"`
@@ -49,25 +53,28 @@ type Assignee struct {
 	Phone    string
 }
 type Template struct {
-	ProjectName    string
-	GroupName      string
-	ParentName     string
-	TaskName       string
-	TaskType       string
-	CurrentStatus  string
-	PreviousStatus string
-	CommentContent string
-	CommentAuthor  string
-	EntityType     string
-	Assignees      []Assignee
-	AssigneesStr   string
-	TaskURL        string
-	MentionContent string
-	ProcessEmoji   string
-	StatusMessage  string
-	StatusUpper    string
-	StatusEmoji    string
-	GoogleDriveURL string
+	ProjectName             string
+	GroupName               string
+	ParentName              string
+	TaskName                string
+	TaskType                string
+	CurrentStatus           string
+	PreviousStatus          string
+	CommentContent          string
+	CommentAuthor           string
+	EntityType              string
+	Assignees               []Assignee
+	AssigneesStr            string
+	TaskURL                 string
+	MentionContent          string
+	ProcessEmoji            string
+	StatusMessage           string
+	StatusUpper             string
+	StatusEmoji             string
+	GoogleDriveURL          string
+	PreviewImageURL         string // Kitsu プレビュー画像 URL（空ならスキップ）
+	IsCommentOnly           bool   // コメントのみの更新（ステータス変化なし）
+	StatusTransitionMessage string // ステータス遷移を説明するメッセージ
 }
 
 // Discord APIのメッセージ作成レスポンス
@@ -99,6 +106,29 @@ func statusMessageInfo(status string) (string, string) {
 		return "作業を開始してください", "🟢"
 	default:
 		return "", "📌"
+	}
+}
+
+// statusTransitionMessage は前後のステータス遷移に応じた補足メッセージを返す。
+// 特に対応しない遷移では空文字列を返す。
+func statusTransitionMessage(prev, current string) string {
+	if prev == "" || strings.EqualFold(prev, current) {
+		return ""
+	}
+	key := strings.ToUpper(prev) + "→" + strings.ToUpper(current)
+	switch key {
+	case "RETAKE→DONE", "RETAKE→WFA":
+		return "🔁 再修正版がアップされました"
+	case "WFA→RETAKE":
+		return "🔃 チェック後、リテイクになりました"
+	case "READY→WIP":
+		return "🚀 作業を開始しました"
+	case "WIP→WFA":
+		return "📤 チェック依頼が送られました"
+	case "WFA→DONE":
+		return "🎉 最終承認されました！お疲れ様でした"
+	default:
+		return ""
 	}
 }
 
@@ -275,7 +305,8 @@ func SendMessageBunch(conf config.Config, data []kitsu.MessagePayload, webHookUR
 		// ステータスごとのメンション対象を conf.Mention の設定から決める。
 		// CheckerStatuses に含まれるステータスではチェッカーをメンション、
 		// ArtistStatuses に含まれるステータスではアーティスト全員をメンションする。
-		// 両方に含まれるステータスでは両者を併記する。
+		// HereStatuses に含まれるステータスでは @here を追加（緊急通知）。
+		// 複数に含まれるステータスでは全てを併記する。
 		currentStatus := strings.ToUpper(elem.TaskStatus.ShortName)
 		var mentionParts []string
 		if containsIgnoreCase(conf.Mention.CheckerStatuses, currentStatus) {
@@ -294,6 +325,10 @@ func SendMessageBunch(conf config.Config, data []kitsu.MessagePayload, webHookUR
 				mentionParts = append(mentionParts, artistJoined)
 			}
 		}
+		// 緊急ステータスは @here でチャンネル全員に通知
+		if containsIgnoreCase(conf.Mention.HereStatuses, currentStatus) {
+			mentionParts = append(mentionParts, "@here")
+		}
 		mentionContent := strings.Join(mentionParts, " ")
 		statusMessage, statusEmoji := statusMessageInfo(currentStatus)
 
@@ -301,6 +336,8 @@ func SendMessageBunch(conf config.Config, data []kitsu.MessagePayload, webHookUR
 		placeholders.StatusMessage = statusMessage
 		placeholders.StatusEmoji = statusEmoji
 		placeholders.GoogleDriveURL = conf.GoogleDrive.URL
+		placeholders.IsCommentOnly = elem.IsCommentOnly
+		placeholders.StatusTransitionMessage = statusTransitionMessage(elem.PreviousStatusName, elem.TaskStatus.ShortName)
 
 		// TaskURL を組み立て
 		category := "assets"
@@ -314,6 +351,12 @@ func SendMessageBunch(conf config.Config, data []kitsu.MessagePayload, webHookUR
 		}
 		// ショット一覧 or アセット一覧に飛ぶ
 		placeholders.TaskURL = fmt.Sprintf("%sproductions/%s/%s", host, elem.Project.ID, category)
+
+		// Kitsu プレビュー画像 URL を組み立て
+		// Entity.PreviewFileID は interface{} なので string にキャストする
+		if id, ok := elem.Entity.Entity.PreviewFileID.(string); ok && id != "" {
+			placeholders.PreviewImageURL = fmt.Sprintf("%sapi/pictures/preview-files/%s/original", host, id)
+		}
 
 		// カラーコードを変換
 		hexColor := strings.ReplaceAll(elem.TaskStatus.Color, "#", "")
@@ -333,6 +376,11 @@ func SendMessageBunch(conf config.Config, data []kitsu.MessagePayload, webHookUR
 		embed.Author.Name = truncate.TruncateString(author, 256)
 		embed.Footer.Text = truncate.TruncateString(footer, 2048)
 		embed.Url = truncate.TruncateString(placeholders.TaskURL, 2000)
+
+		// プレビュー画像がある場合は embed に添付
+		if placeholders.PreviewImageURL != "" {
+			embed.Image = &EmbedImage{URL: placeholders.PreviewImageURL}
+		}
 
 		fieldsRaw := parseTaskTemplate("tpl/"+tplPreset+"/fields.tpl", placeholders)
 		if strings.TrimSpace(fieldsRaw) != "" {

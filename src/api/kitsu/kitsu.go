@@ -155,6 +155,7 @@ type ProjectStatuses struct {
 
 type MessagePayload struct {
 	PreviousStatusName string // we store task status from DB and consider it 'old/prevous'
+	IsCommentOnly      bool   // true when only the comment changed (no status/timestamp change)
 	Project            struct {
 		Project
 	}

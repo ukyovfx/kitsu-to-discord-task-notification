@@ -32,6 +32,7 @@ type CheckerEntry struct {
 type MentionConfig struct {
 	ArtistStatuses  []string       `toml:"artistStatuses"`  // アーティストにメンションするステータス
 	CheckerStatuses []string       `toml:"checkerStatuses"` // チェッカーにメンションするステータス
+	HereStatuses    []string       `toml:"hereStatuses"`    // @here を飛ばす緊急ステータス
 	UserMap         []UserMapEntry `toml:"userMap"`         // Kitsu名 → Discord ID
 	Checkers        []CheckerEntry `toml:"checkers"`        // タスクタイプ → チェッカー Discord ID
 }
