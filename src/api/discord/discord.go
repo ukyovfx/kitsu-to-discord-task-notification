@@ -384,8 +384,10 @@ func SendMessageBunch(conf config.Config, data []kitsu.MessagePayload, webHookUR
 
 		// Kitsu プレビュー画像 URL を組み立て
 		// Entity.PreviewFileID は interface{} なので string にキャストする
+		// パス: /api/pictures/thumbnails/preview-files/{id}.png
+		// nginx で認証バイパス設定が必要（README 参照）
 		if id, ok := elem.Entity.Entity.PreviewFileID.(string); ok && id != "" {
-			placeholders.PreviewImageURL = fmt.Sprintf("%sapi/pictures/preview-files/%s/original", host, id)
+			placeholders.PreviewImageURL = fmt.Sprintf("%sapi/pictures/thumbnails/preview-files/%s.png", host, id)
 		}
 
 		// カラーコードを変換

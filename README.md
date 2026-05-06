@@ -73,13 +73,16 @@ docker-compose logs -f app
 
 ### プレビュー画像表示（オプション）
 
-Kitsu 前段の nginx に以下の `location` を追加すると Discord に画像が表示されます：
+Discord の embed 画像には **認証なしでアクセス可能な URL** が必要です。Kitsu のプレビュー API はデフォルトで JWT 認証が必要なため、nginx にバイパス設定を追加します。
+
+**nginx 設定（Kitsu サーバー上で実施）:**
 
 ```nginx
-# プレビューファイルのみ認証なしで公開（UUID で推測困難）
-location ~ ^/api/pictures/preview-files/ {
-    proxy_pass http://localhost:5000;  # Kitsu バックエンドのポートに合わせる
+# サムネイルのみ認証なしで公開（ファイル名が UUID なので推測困難）
+location ~ ^/api/pictures/thumbnails/preview-files/ {
+    proxy_pass http://localhost:5000;   # Kitsu バックエンド（zou）のポートに合わせる
     proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
 }
 ```
 
@@ -87,7 +90,13 @@ location ~ ^/api/pictures/preview-files/ {
 sudo nginx -t && sudo systemctl reload nginx
 ```
 
-> ⚠️ プレビュー URL は UUID で推測困難ですが、Discord チャンネル自体のアクセス制御を必ず設定してください。社内素材が外部に漏洩しないよう注意。
+設定後、以下で動作確認できます：
+```bash
+# 認証なしで 200 が返れば OK（{id} は任意の preview_file_id に置換）
+curl -o /dev/null -w "%{http_code}" http://YOUR_KITSU_HOST/api/pictures/thumbnails/preview-files/{id}.png
+```
+
+> ⚠️ サムネイル URL は UUID で推測困難ですが、Discord チャンネル自体のアクセス制御を必ず設定してください。社内素材が外部に漏洩しないよう注意。
 
 ### ディレクトリ構成
 

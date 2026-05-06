@@ -29,8 +29,19 @@ log                    = true
 #    webhookURL = "https://discord.com/api/webhooks/..."
 
 # 工程（タスクタイプ）別に送信先チャンネルを分けたい場合（任意）
+# ここに書いた工程の通知は指定したWebhookに送られ、デフォルトチャンネルには流れない
+# ここに書いていない工程はすべて discord.webhookURL（デフォルト）へ流れる
+# taskType は Kitsu の「タスクタイプ」名と完全一致させること
+#[[discord.taskTypeWebhooks]]
+#    taskType   = "Compositing"
+#    webhookURL = "https://discord.com/api/webhooks/..."
+#
 #[[discord.taskTypeWebhooks]]
 #    taskType   = "Animation"
+#    webhookURL = "https://discord.com/api/webhooks/..."
+#
+#[[discord.taskTypeWebhooks]]
+#    taskType   = "Lighting"
 #    webhookURL = "https://discord.com/api/webhooks/..."
 
 # ============================================================
