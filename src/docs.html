@@ -1,0 +1,1796 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kitsu-Discord Pipeline v2.2 — DCC Integration & Monitoring</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu", sans-serif;
+            background: #fafafa;
+            color: #333;
+        }
+
+        header {
+            background: #f5f5f5;
+            border-bottom: 1px solid #ddd;
+            padding: 2rem;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+        }
+
+        header h1 {
+            font-size: 2rem;
+            margin-bottom: 0.5rem;
+            color: #222;
+        }
+
+        header p {
+            color: #666;
+            font-size: 0.95rem;
+        }
+
+        .nav-tabs {
+            display: flex;
+            gap: 0;
+            margin-top: 1.5rem;
+            border-bottom: 1px solid #ddd;
+            overflow-x: auto;
+        }
+
+        .nav-tabs button {
+            padding: 0.75rem 1.5rem;
+            background: none;
+            border: none;
+            border-bottom: 2px solid transparent;
+            cursor: pointer;
+            font-size: 0.9rem;
+            color: #666;
+            transition: all 0.2s;
+            white-space: nowrap;
+        }
+
+        .nav-tabs button.active {
+            color: #333;
+            border-bottom-color: #333;
+            font-weight: 600;
+        }
+
+        .nav-tabs button:hover {
+            color: #333;
+        }
+
+        .canvas-container {
+            display: none;
+            padding: 2rem;
+            overflow-x: auto;
+            min-height: calc(100vh - 200px);
+        }
+
+        .canvas-container.active {
+            display: block;
+        }
+
+        .cards-row {
+            display: flex;
+            gap: 2rem;
+            padding-bottom: 2rem;
+            min-width: max-content;
+        }
+
+        .card {
+            background: white;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 1.5rem;
+            min-width: 500px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+            transition: box-shadow 0.2s;
+        }
+
+        .card:hover {
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+
+        .card h3 {
+            font-size: 1.1rem;
+            margin-bottom: 1rem;
+            color: #222;
+            border-bottom: 2px solid #e0e0e0;
+            padding-bottom: 0.5rem;
+        }
+
+        .card-label {
+            display: inline-block;
+            font-size: 0.75rem;
+            font-weight: 600;
+            background: #e8e8e8;
+            color: #555;
+            padding: 0.25rem 0.75rem;
+            border-radius: 3px;
+            margin-bottom: 0.5rem;
+        }
+
+        .card-label.diagram { background: #e3f2fd; color: #1565c0; }
+        .card-label.admin { background: #f3e5f5; color: #6a1b9a; }
+        .card-label.message { background: #e8f5e9; color: #2e7d32; }
+        .card-label.workflow { background: #fff3e0; color: #e65100; }
+
+        svg {
+            width: 100%;
+            height: auto;
+            background: #f9f9f9;
+            border: 1px solid #e0e0e0;
+            border-radius: 4px;
+        }
+
+        .wireframe {
+            background: #f0f0f0;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            padding: 1rem;
+            font-family: "Monaco", "Courier New", monospace;
+            font-size: 0.85rem;
+            line-height: 1.6;
+        }
+
+        .wireframe-section {
+            margin-bottom: 1rem;
+            border: 1px dashed #bbb;
+            padding: 0.75rem;
+            background: white;
+            border-radius: 2px;
+        }
+
+        .wireframe-section h4 {
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: #555;
+            margin-bottom: 0.5rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .wireframe-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 0.5rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .wireframe-box {
+            background: #ddd;
+            border: 1px solid #999;
+            padding: 0.5rem;
+            font-size: 0.7rem;
+            text-align: center;
+            color: #666;
+        }
+
+        .message-bubble {
+            background: #e8e8e8;
+            border-left: 4px solid #666;
+            padding: 1rem;
+            margin-bottom: 0.75rem;
+            border-radius: 4px;
+            font-family: "Monaco", "Courier New", monospace;
+            font-size: 0.85rem;
+            line-height: 1.5;
+        }
+
+        .message-bubble.success {
+            background: #e8f5e9;
+            border-left-color: #2e7d32;
+            color: #1b5e20;
+        }
+
+        .message-bubble.warning {
+            background: #fff3e0;
+            border-left-color: #e65100;
+            color: #bf360c;
+        }
+
+        .message-bubble.error {
+            background: #ffebee;
+            border-left-color: #c62828;
+            color: #b71c1c;
+        }
+
+        .message-bubble.info {
+            background: #e3f2fd;
+            border-left-color: #1565c0;
+            color: #0d47a1;
+        }
+
+        .table-grid {
+            display: grid;
+            gap: 0.5rem;
+            font-size: 0.85rem;
+            margin-top: 1rem;
+        }
+
+        .table-row {
+            display: grid;
+            grid-template-columns: 1.5fr 2fr 2fr;
+            gap: 0.5rem;
+            padding: 0.5rem;
+            background: #f9f9f9;
+            border: 1px solid #ddd;
+            border-radius: 2px;
+        }
+
+        .table-row.header {
+            background: #e8e8e8;
+            font-weight: 600;
+            border-bottom: 2px solid #999;
+        }
+
+        .table-cell {
+            padding: 0.5rem;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 0.25rem 0.5rem;
+            border-radius: 3px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            white-space: nowrap;
+        }
+
+        .badge.phase-a { background: #ffcdd2; color: #c62828; }
+        .badge.phase-b { background: #ffe0b2; color: #e65100; }
+        .badge.phase-c { background: #c8e6c9; color: #2e7d32; }
+
+        footer {
+            background: #f5f5f5;
+            border-top: 1px solid #ddd;
+            padding: 2rem;
+            text-align: center;
+            color: #999;
+            font-size: 0.85rem;
+        }
+
+        .note {
+            background: #fffde7;
+            border-left: 4px solid #f57f17;
+            padding: 0.75rem;
+            border-radius: 2px;
+            margin: 1rem 0;
+            font-size: 0.85rem;
+            color: #555;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>🚀 Kitsu-Discord Pipeline v2.2 — DCC Integration & Monitoring</h1>
+        <p>Complete visualization of Phase 2-2 features: DCC tool integration, error retry mechanisms, audit logging, and @mention role filtering</p>
+        <div class="nav-tabs">
+            <button class="tab-btn active" onclick="showTab('architecture')">1. Architecture</button>
+            <button class="tab-btn" onclick="showTab('dataflow')">2. Data Flow</button>
+            <button class="tab-btn" onclick="showTab('admin-ui')">3. Admin UI</button>
+            <button class="tab-btn" onclick="showTab('messages')">4. Discord Messages</button>
+            <button class="tab-btn" onclick="showTab('entity-mapping')">5. Entity & Task Types</button>
+            <button class="tab-btn" onclick="showTab('phase-roadmap')">6. Phase Roadmap</button>
+            <button class="tab-btn" onclick="showTab('workflows')">7. Workflows</button>
+            <button class="tab-btn" onclick="showTab('phase-2-2-features')">8. Phase 2-2 Features</button>
+            <button class="tab-btn" onclick="showTab('phase-2-2-admin')">9. Admin Routes</button>
+            <button class="tab-btn" onclick="showTab('phase-2-2-schema')">10. DB Schema</button>
+            <button class="tab-btn" onclick="showTab('phase-2-2-webhook')">11. Webhook Flow</button>
+        </div>
+    </header>
+
+    <!-- TAB 1: ARCHITECTURE -->
+    <div id="architecture" class="canvas-container active">
+        <div class="cards-row">
+            <!-- Architecture Overview -->
+            <div class="card">
+                <span class="card-label diagram">System Architecture</span>
+                <h3>🏗️ System Overview</h3>
+                <svg viewBox="0 0 450 400" xmlns="http://www.w3.org/2000/svg">
+                    <!-- Kitsu -->
+                    <rect x="20" y="20" width="120" height="80" fill="none" stroke="#333" stroke-width="2" rx="4"/>
+                    <text x="80" y="60" font-size="14" font-weight="600" text-anchor="middle">Kitsu API</text>
+                    <text x="80" y="80" font-size="12" text-anchor="middle" fill="#666">(Project, Entity,</text>
+                    <text x="80" y="95" font-size="12" text-anchor="middle" fill="#666">Task, Status)</text>
+
+                    <!-- Polling / Webhook -->
+                    <path d="M 140 60 L 180 60" stroke="#666" stroke-width="2" marker-end="url(#arrowhead)"/>
+                    <text x="160" y="50" font-size="11" text-anchor="middle" fill="#666">Polling</text>
+
+                    <!-- Bot Process -->
+                    <rect x="180" y="20" width="120" height="80" fill="none" stroke="#333" stroke-width="2" rx="4"/>
+                    <text x="240" y="50" font-size="14" font-weight="600" text-anchor="middle">Kitsu-Discord</text>
+                    <text x="240" y="70" font-size="12" text-anchor="middle" fill="#666">Bot Process</text>
+                    <text x="240" y="85" font-size="11" text-anchor="middle" fill="#888">(Poll, Transform,</text>
+
+                    <!-- Arrow to Discord -->
+                    <path d="M 300 60 L 340 60" stroke="#666" stroke-width="2" marker-end="url(#arrowhead)"/>
+                    <text x="320" y="50" font-size="11" text-anchor="middle" fill="#666">Webhook URL</text>
+
+                    <!-- Discord -->
+                    <rect x="340" y="20" width="100" height="80" fill="none" stroke="#333" stroke-width="2" rx="4"/>
+                    <text x="390" y="55" font-size="14" font-weight="600" text-anchor="middle">Discord</text>
+                    <text x="390" y="75" font-size="12" text-anchor="middle" fill="#666">Channels</text>
+
+                    <!-- Database -->
+                    <rect x="100" y="180" width="120" height="60" fill="none" stroke="#333" stroke-width="2" rx="4"/>
+                    <text x="160" y="210" font-size="14" font-weight="600" text-anchor="middle">Database</text>
+                    <text x="160" y="230" font-size="11" text-anchor="middle" fill="#666">(PostgreSQL)</text>
+
+                    <!-- Bot to DB -->
+                    <path d="M 220 100 L 200 180" stroke="#666" stroke-width="2" marker-end="url(#arrowhead)"/>
+                    <text x="195" y="145" font-size="11" text-anchor="middle" fill="#666">Read/Write</text>
+
+                    <!-- Config -->
+                    <rect x="280" y="180" width="120" height="60" fill="none" stroke="#333" stroke-width="2" rx="4"/>
+                    <text x="340" y="210" font-size="14" font-weight="600" text-anchor="middle">Config</text>
+                    <text x="340" y="230" font-size="11" text-anchor="middle" fill="#666">(conf.toml, .env)</text>
+
+                    <!-- Bot to Config -->
+                    <path d="M 260 100 L 320 180" stroke="#666" stroke-width="2" marker-end="url(#arrowhead)"/>
+                    <text x="275" y="145" font-size="11" text-anchor="middle" fill="#666">Load</text>
+
+                    <!-- Admin Web UI -->
+                    <rect x="100" y="300" width="300" height="70" fill="none" stroke="#333" stroke-width="2" rx="4"/>
+                    <text x="250" y="325" font-size="14" font-weight="600" text-anchor="middle">Admin Web UI</text>
+                    <text x="250" y="345" font-size="11" text-anchor="middle" fill="#666">(Setup, Project, Channels, Users, Checkers)</text>
+
+                    <!-- Admin to DB -->
+                    <path d="M 160 260 L 180 300" stroke="#666" stroke-width="2" marker-end="url(#arrowhead)"/>
+                    <path d="M 180 300 L 160 260" stroke="#666" stroke-width="2" marker-end="url(#arrowhead)"/>
+
+                    <!-- Arrow marker -->
+                    <defs>
+                        <marker id="arrowhead" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+                            <polygon points="0 0, 10 3, 0 6" fill="#333"/>
+                        </marker>
+                    </defs>
+                </svg>
+                <div class="note">Kitsuからのデータ変更をポーリングで検知 → Discord Webhookで通知を配信</div>
+            </div>
+
+            <!-- Component Breakdown -->
+            <div class="card">
+                <span class="card-label diagram">Components</span>
+                <h3>📦 Main Components</h3>
+                <div class="table-grid">
+                    <div class="table-row header">
+                        <div class="table-cell">Component</div>
+                        <div class="table-cell">Role</div>
+                        <div class="table-cell">Technology</div>
+                    </div>
+                    <div class="table-row">
+                        <div class="table-cell"><strong>API Poller</strong></div>
+                        <div class="table-cell">Kitsuをポーリング、変更検知</div>
+                        <div class="table-cell">Go goroutine</div>
+                    </div>
+                    <div class="table-row">
+                        <div class="table-cell"><strong>Message Router</strong></div>
+                        <div class="table-cell">Task→Channel対応付け</div>
+                        <div class="table-cell">Go, SQL</div>
+                    </div>
+                    <div class="table-row">
+                        <div class="table-cell"><strong>Message Formatter</strong></div>
+                        <div class="table-cell">Kitsuデータ→Discordメッセージ</div>
+                        <div class="table-cell">Go templates</div>
+                    </div>
+                    <div class="table-row">
+                        <div class="table-cell"><strong>Webhook Sender</strong></div>
+                        <div class="table-cell">Discordへ送信、再試行</div>
+                        <div class="table-cell">HTTP client</div>
+                    </div>
+                    <div class="table-row">
+                        <div class="table-cell"><strong>Admin Web UI</strong></div>
+                        <div class="table-cell">セットアップ、管理画面</div>
+                        <div class="table-cell">HTML/CSS/JS</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Sequence Diagram -->
+            <div class="card">
+                <span class="card-label diagram">Sequence</span>
+                <h3>🔄 Typical Update Flow</h3>
+                <svg viewBox="0 0 500 350" xmlns="http://www.w3.org/2000/svg">
+                    <!-- Timeline headers -->
+                    <text x="80" y="20" font-size="12" font-weight="600" text-anchor="middle">Kitsu</text>
+                    <text x="250" y="20" font-size="12" font-weight="600" text-anchor="middle">Bot Process</text>
+                    <text x="420" y="20" font-size="12" font-weight="600" text-anchor="middle">Discord</text>
+
+                    <!-- Vertical lines -->
+                    <line x1="80" y1="30" x2="80" y2="320" stroke="#ccc" stroke-width="1" stroke-dasharray="2,2"/>
+                    <line x1="250" y1="30" x2="250" y2="320" stroke="#ccc" stroke-width="1" stroke-dasharray="2,2"/>
+                    <line x1="420" y1="30" x2="420" y2="320" stroke="#ccc" stroke-width="1" stroke-dasharray="2,2"/>
+
+                    <!-- Messages -->
+                    <text x="140" y="50" font-size="10" fill="#666">1. Poll Tasks</text>
+                    <path d="M 90 45 L 240 55" stroke="#666" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+                    <text x="150" y="80" font-size="10" fill="#666">2. Check Status Change</text>
+                    <circle cx="250" cy="75" r="3" fill="#666"/>
+
+                    <text x="140" y="110" font-size="10" fill="#666">3. Load Config</text>
+                    <path d="M 240 105 L 260 105" stroke="#666" stroke-width="1.5"/>
+
+                    <text x="140" y="140" font-size="10" fill="#666">4. Generate Message</text>
+                    <circle cx="250" cy="135" r="3" fill="#666"/>
+
+                    <text x="300" y="170" font-size="10" fill="#666">5. Send via Webhook</text>
+                    <path d="M 260 165 L 410 175" stroke="#666" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+                    <text x="430" y="200" font-size="10" fill="#666">6. Post to Channel</text>
+                    <circle cx="420" cy="195" r="3" fill="#666"/>
+
+                    <text x="220" y="230" font-size="10" fill="#666">7. Store Message ID</text>
+                    <path d="M 410 225 L 260 235" stroke="#666" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+                    <text x="140" y="260" font-size="10" fill="#666">8. Update Poll Marker</text>
+                    <circle cx="250" cy="255" r="3" fill="#666"/>
+
+                    <text x="100" y="290" font-size="10" fill="#666">Loop</text>
+                    <path d="M 80 280 Q 30 270 30 150 Q 30 50 80 55" stroke="#888" stroke-width="2" fill="none" marker-end="url(#arrow)"/>
+                </svg>
+            </div>
+        </div>
+    </div>
+
+    <!-- TAB 2: DATA FLOW -->
+    <div id="dataflow" class="canvas-container">
+        <div class="cards-row">
+            <!-- Polling Flow -->
+            <div class="card">
+                <span class="card-label diagram">Polling</span>
+                <h3>🔍 Polling & Detection</h3>
+                <svg viewBox="0 0 480 350" xmlns="http://www.w3.org/2000/svg">
+                    <!-- START -->
+                    <circle cx="240" cy="30" r="20" fill="#333" stroke="#333" stroke-width="2"/>
+                    <text x="240" y="35" font-size="12" font-weight="600" fill="white" text-anchor="middle">START</text>
+
+                    <!-- Timer -->
+                    <rect x="150" y="70" width="180" height="50" fill="none" stroke="#333" stroke-width="2" rx="4"/>
+                    <text x="240" y="95" font-size="12" font-weight="600" text-anchor="middle">Poll Interval</text>
+                    <text x="240" y="110" font-size="10" text-anchor="middle" fill="#666">(e.g., 30 sec)</text>
+                    <path d="M 240 50 L 240 70" stroke="#333" stroke-width="2" marker-end="url(#arrow)"/>
+
+                    <!-- Fetch -->
+                    <rect x="150" y="150" width="180" height="50" fill="none" stroke="#333" stroke-width="2" rx="4"/>
+                    <text x="240" y="175" font-size="12" font-weight="600" text-anchor="middle">Fetch /api/tasks</text>
+                    <text x="240" y="190" font-size="10" text-anchor="middle" fill="#666">(Modified > Last Poll)</text>
+                    <path d="M 240 120 L 240 150" stroke="#333" stroke-width="2" marker-end="url(#arrow)"/>
+
+                    <!-- Compare -->
+                    <rect x="150" y="230" width="180" height="50" fill="none" stroke="#333" stroke-width="2" rx="4"/>
+                    <text x="240" y="255" font-size="12" font-weight="600" text-anchor="middle">Compare Status</text>
+                    <text x="240" y="270" font-size="10" text-anchor="middle" fill="#666">(DB vs. Kitsu)</text>
+                    <path d="M 240 200 L 240 230" stroke="#333" stroke-width="2" marker-end="url(#arrow)"/>
+
+                    <!-- Decision -->
+                    <path d="M 240 280 L 360 310" stroke="#333" stroke-width="2" marker-end="url(#arrow)"/>
+                    <text x="310" y="295" font-size="10" fill="#666">Changed?</text>
+
+                    <!-- Yes -->
+                    <path d="M 240 280 L 120 310" stroke="#333" stroke-width="2" marker-end="url(#arrow)"/>
+                    <text x="170" y="295" font-size="10" fill="#666">YES</text>
+
+                    <!-- Update Message -->
+                    <rect x="30" y="310" width="180" height="50" fill="none" stroke="#333" stroke-width="2" rx="4"/>
+                    <text x="120" y="335" font-size="12" font-weight="600" text-anchor="middle">Update Message</text>
+                    <text x="120" y="350" font-size="10" text-anchor="middle" fill="#666">(or Create New)</text>
+
+                    <!-- No / Loop -->
+                    <path d="M 360 310 Q 420 200 360 150" stroke="#333" stroke-width="2" marker-end="url(#arrow)"/>
+                    <text x="400" y="230" font-size="10" fill="#666">NO (loop)</text>
+                </svg>
+            </div>
+
+            <!-- Message Routing -->
+            <div class="card">
+                <span class="card-label diagram">Routing</span>
+                <h3>🛣️ Message Routing Logic</h3>
+                <svg viewBox="0 0 480 400" xmlns="http://www.w3.org/2000/svg">
+                    <!-- Input: Task Object -->
+                    <rect x="150" y="20" width="180" height="50" fill="none" stroke="#333" stroke-width="2" rx="4"/>
+                    <text x="240" y="45" font-size="12" font-weight="600" text-anchor="middle">Task Object</text>
+                    <text x="240" y="60" font-size="10" text-anchor="middle" fill="#666">(taskType, entityType)</text>
+
+                    <!-- Step 1: Entity Type -->
+                    <path d="M 240 70 L 240 100" stroke="#333" stroke-width="2" marker-end="url(#arrow)"/>
+                    <rect x="140" y="100" width="200" height="60" fill="none" stroke="#333" stroke-width="2" rx="4"/>
+                    <text x="240" y="120" font-size="11" font-weight="600" text-anchor="middle">Step 1: Entity Type?</text>
+                    <text x="240" y="135" font-size="9" text-anchor="middle" fill="#666">Sequence / Asset / Shot</text>
+                    <text x="240" y="150" font-size="9" text-anchor="middle" fill="#666">(Phase 0b で分離)</text>
+
+                    <!-- Step 2: Task Type -->
+                    <path d="M 240 160 L 240 190" stroke="#333" stroke-width="2" marker-end="url(#arrow)"/>
+                    <rect x="140" y="190" width="200" height="60" fill="none" stroke="#333" stroke-width="2" rx="4"/>
+                    <text x="240" y="210" font-size="11" font-weight="600" text-anchor="middle">Step 2: Task Type?</text>
+                    <text x="240" y="225" font-size="9" text-anchor="middle" fill="#666">"Layout", "Animation",</text>
+                    <text x="240" y="237" font-size="9" text-anchor="middle" fill="#666">"Compositing" etc.</text>
+
+                    <!-- Step 3: Find Channel -->
+                    <path d="M 240 250 L 240 280" stroke="#333" stroke-width="2" marker-end="url(#arrow)"/>
+                    <rect x="140" y="280" width="200" height="60" fill="none" stroke="#333" stroke-width="2" rx="4"/>
+                    <text x="240" y="300" font-size="11" font-weight="600" text-anchor="middle">Step 3: Find Channel</text>
+                    <text x="240" y="315" font-size="9" text-anchor="middle" fill="#666">ProjectWebhook table</text>
+                    <text x="240" y="327" font-size="9" text-anchor="middle" fill="#666">(Entity + Task Type)</text>
+
+                    <!-- Output -->
+                    <path d="M 240 340 L 240 370" stroke="#333" stroke-width="2" marker-end="url(#arrow)"/>
+                    <rect x="150" y="370" width="180" height="40" fill="none" stroke="#333" stroke-width="2" rx="4"/>
+                    <text x="240" y="395" font-size="12" font-weight="600" text-anchor="middle">Webhook URL</text>
+                </svg>
+                <div class="note">複数ルート対応（Phase B-2 で複雑さ軽減予定）</div>
+            </div>
+
+            <!-- Error Handling -->
+            <div class="card">
+                <span class="card-label diagram">Error Handling</span>
+                <h3>⚠️ Error Recovery</h3>
+                <svg viewBox="0 0 480 380" xmlns="http://www.w3.org/2000/svg">
+                    <!-- Error Decision -->
+                    <path d="M 220 30 L 310 80" stroke="#c62828" stroke-width="2"/>
+                    <path d="M 260 30 L 170 80" stroke="#2e7d32" stroke-width="2"/>
+                    <text x="280" y="50" font-size="10" fill="#c62828" font-weight="600">Error</text>
+                    <text x="170" y="50" font-size="10" fill="#2e7d32" font-weight="600">Success</text>
+
+                    <!-- Success path -->
+                    <rect x="80" y="80" width="160" height="50" fill="none" stroke="#2e7d32" stroke-width="2" rx="4"/>
+                    <text x="160" y="105" font-size="11" font-weight="600" text-anchor="middle">Store Message ID</text>
+                    <text x="160" y="120" font-size="9" text-anchor="middle" fill="#666">in Database</text>
+                    <path d="M 160 130 L 160 170" stroke="#2e7d32" stroke-width="2" marker-end="url(#arrow)"/>
+
+                    <rect x="80" y="170" width="160" height="50" fill="none" stroke="#2e7d32" stroke-width="2" rx="4"/>
+                    <text x="160" y="195" font-size="11" font-weight="600" text-anchor="middle">Continue</text>
+                    <text x="160" y="210" font-size="9" text-anchor="middle" fill="#666">Next Poll</text>
+
+                    <!-- Error path - Retry -->
+                    <rect x="310" y="80" width="160" height="50" fill="none" stroke="#c62828" stroke-width="2" rx="4"/>
+                    <text x="390" y="100" font-size="11" font-weight="600" text-anchor="middle">Retry Queue?</text>
+                    <text x="390" y="115" font-size="9" text-anchor="middle" fill="#666">(Exponential backoff)</text>
+
+                    <path d="M 390 130 L 390 170" stroke="#c62828" stroke-width="2" marker-end="url(#arrow)"/>
+                    <text x="420" y="150" font-size="9" fill="#666">Max retries?</text>
+
+                    <!-- Max retries - Fail -->
+                    <path d="M 390 170 L 390 210" stroke="#c62828" stroke-width="2" marker-end="url(#arrow)"/>
+                    <rect x="310" y="210" width="160" height="60" fill="none" stroke="#c62828" stroke-width="2" rx="4"/>
+                    <text x="390" y="235" font-size="11" font-weight="600" text-anchor="middle">Log Error + Alert</text>
+                    <text x="390" y="250" font-size="9" text-anchor="middle" fill="#666">Warn in Admin UI</text>
+                    <text x="390" y="262" font-size="9" text-anchor="middle" fill="#666">Manual Retry</text>
+
+                    <!-- Phase A-6: DB Cleanup -->
+                    <rect x="310" y="310" width="160" height="60" fill="none" stroke="#ff9800" stroke-width="2" rx="4"/>
+                    <text x="390" y="330" font-size="10" font-weight="600" text-anchor="middle">Phase A-6:</text>
+                    <text x="390" y="345" font-size="10" font-weight="600" text-anchor="middle">Clear old MessageID</text>
+                    <text x="390" y="360" font-size="8" text-anchor="middle" fill="#666">(prevent orphan)</text>
+                    <path d="M 390 270 L 390 310" stroke="#ff9800" stroke-width="2" marker-end="url(#arrow)"/>
+                </svg>
+            </div>
+        </div>
+    </div>
+
+    <!-- TAB 3: ADMIN UI -->
+    <div id="admin-ui" class="canvas-container">
+        <div class="cards-row">
+            <!-- Admin Index -->
+            <div class="card">
+                <span class="card-label admin">Screen: Index</span>
+                <h3>📊 Admin Index</h3>
+                <div class="wireframe">
+                    <div class="wireframe-section">
+                        <h4>Header</h4>
+                        <div class="wireframe-box">Logo | Kitsu-Discord Admin</div>
+                    </div>
+                    <div class="wireframe-section">
+                        <h4>Navigation Tabs</h4>
+                        <div style="display: flex; gap: 0.5rem; margin-bottom: 0.5rem;">
+                            <div class="wireframe-box" style="flex: 1;">Dashboard (active)</div>
+                            <div class="wireframe-box" style="flex: 1;">Project Setup</div>
+                            <div class="wireframe-box" style="flex: 1;">Users</div>
+                        </div>
+                    </div>
+                    <div class="wireframe-section">
+                        <h4>Dashboard Tiles (3×3 Grid)</h4>
+                        <div class="wireframe-grid">
+                            <div class="wireframe-box">📋 Projects</div>
+                            <div class="wireframe-box">🔧 Setup</div>
+                            <div class="wireframe-box">👥 Users</div>
+                        </div>
+                        <div class="wireframe-grid">
+                            <div class="wireframe-box">✅ Checkers</div>
+                            <div class="wireframe-box">🔗 Discord</div>
+                            <div class="wireframe-box">📂 Drive</div>
+                        </div>
+                        <div class="wireframe-grid">
+                            <div class="wireframe-box">🔧 Settings</div>
+                            <div class="wireframe-box">📊 Logs</div>
+                            <div class="wireframe-box">ℹ️ About</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="note">Phase A-3: 「プロジェクト設定」タイルを追加</div>
+            </div>
+
+            <!-- Project Setup -->
+            <div class="card">
+                <span class="card-label admin">Screen: Setup</span>
+                <h3>⚙️ Project Setup Wizard</h3>
+                <div class="wireframe">
+                    <div class="wireframe-section">
+                        <h4>Step 1: Basic Info</h4>
+                        <div class="wireframe-box">Input: Project Name</div>
+                        <div class="wireframe-box">Input: Kitsu Project ID</div>
+                    </div>
+                    <div class="wireframe-section">
+                        <h4>Step 2: Type Selection</h4>
+                        <div class="wireframe-box">Radio: CG / VFX</div>
+                        <div class="wireframe-box">Radio: 実写</div>
+                        <div class="wireframe-box">Radio: アニメ</div>
+                        <div class="wireframe-box" style="background: #fff3e0;">Details: エキスパンダー (Phase B-2)</div>
+                    </div>
+                    <div class="wireframe-section">
+                        <h4>Step 3: Discord Guild</h4>
+                        <div class="wireframe-box">Select: Guild ID</div>
+                        <div class="wireframe-box">Input: Category Name</div>
+                        <div class="wireframe-box">Button: 「Create Category」</div>
+                    </div>
+                    <div class="wireframe-section">
+                        <h4>Step 4: Review + Create</h4>
+                        <div class="wireframe-box">Summary: [Values]</div>
+                        <div class="wireframe-box">Button: 「Create Project」</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Channel Management (Phase 1) -->
+            <div class="card">
+                <span class="card-label admin">Screen: Channels</span>
+                <h3>📺 Project Channel Management</h3>
+                <div class="wireframe">
+                    <div class="wireframe-section">
+                        <h4>Projects List</h4>
+                        <div class="wireframe-box">Project A | Type: CG | Channels: 12 | Edit →</div>
+                        <div class="wireframe-box">Project B | Type: 実写 | Channels: 8 | Edit →</div>
+                    </div>
+                    <div class="wireframe-section">
+                        <h4>Channel List for Project</h4>
+                        <div class="wireframe-box" style="text-align: left;">
+                            • #layout (Layout, Shot)<br/>
+                            • #animation (Animation, Shot)<br/>
+                            • #compositing (Compositing, Shot)<br/>
+                            • #concept (Concept, Sequence)
+                        </div>
+                    </div>
+                    <div class="wireframe-section">
+                        <h4>Add Channel Form</h4>
+                        <div class="wireframe-box">Select: Task Type (with autocomplete)</div>
+                        <div class="wireframe-box">Input: Channel Name (auto-filled)</div>
+                        <div class="wireframe-box">Button: 「Add」</div>
+                    </div>
+                    <div class="wireframe-section">
+                        <h4>Delete Channel</h4>
+                        <div class="wireframe-box" style="background: #ffebee;">Button: 🗑️ (w/ confirm modal)</div>
+                    </div>
+                </div>
+                <div class="note">機能1: 新規スクリーン - チャンネル個別管理</div>
+            </div>
+
+            <!-- User Map -->
+            <div class="card">
+                <span class="card-label admin">Screen: Users</span>
+                <h3>👥 Kitsu User ↔ Discord Map</h3>
+                <div class="wireframe">
+                    <div class="wireframe-section">
+                        <h4>User Map Table</h4>
+                        <div class="wireframe-box" style="text-align: left;">
+                            Kitsu Name | Discord ID | Delete<br/>
+                            alice | 12345... | 🗑️ (w/ confirm)<br/>
+                            bob | 67890... | 🗑️
+                        </div>
+                    </div>
+                    <div class="wireframe-section">
+                        <h4>Add User Form</h4>
+                        <div class="wireframe-box">Select: Kitsu User</div>
+                        <div class="wireframe-box">Input: Discord ID (Phase A-5: validated)</div>
+                        <div class="wireframe-box">Button: 「Add」</div>
+                    </div>
+                </div>
+                <div class="note">Phase A-4: Delete に confirm ダイアログ追加</div>
+            </div>
+
+            <!-- Checker Setup -->
+            <div class="card">
+                <span class="card-label admin">Screen: Checkers</span>
+                <h3>✅ Task Checker Assignment</h3>
+                <div class="wireframe">
+                    <div class="wireframe-section">
+                        <h4>Checker Table</h4>
+                        <div class="wireframe-box" style="text-align: left;">
+                            Project | Task Type | Checker Discord ID | Edit<br/>
+                            ProjectA | Animation | 111 | ✏️<br/>
+                            ProjectA | FX | 222 | ✏️
+                        </div>
+                    </div>
+                    <div class="wireframe-section">
+                        <h4>Responsibility Summary (Phase B-4)</h4>
+                        <div class="wireframe-box" style="background: #e3f2fd; text-align: left;">
+                            Discord 111: Animation, Lighting<br/>
+                            Discord 222: FX, Compositing
+                        </div>
+                    </div>
+                    <div class="wireframe-section">
+                        <h4>Add Checker</h4>
+                        <div class="wireframe-box">Select: Project</div>
+                        <div class="wireframe-box">Select: Task Type</div>
+                        <div class="wireframe-box">Select: Discord User</div>
+                        <div class="wireframe-box">Button: 「Assign」</div>
+                    </div>
+                </div>
+                <div class="note">Phase B-1: Startup時にChecker未設定を警告</div>
+            </div>
+
+            <!-- Drive Setup -->
+            <div class="card">
+                <span class="card-label admin">Screen: Drive</span>
+                <h3>📂 Storage URL Configuration</h3>
+                <div class="wireframe">
+                    <div class="wireframe-section">
+                        <h4>Current Storage URL</h4>
+                        <div class="wireframe-box">https://drive.google.com/...</div>
+                    </div>
+                    <div class="wireframe-section">
+                        <h4>Change URL</h4>
+                        <div class="wireframe-box">Input: New URL</div>
+                        <div class="wireframe-box" style="background: #e8f5e9;">✅ Validation: https + whitelist (Phase 0c)</div>
+                        <div class="wireframe-box">Button: 「Update」</div>
+                    </div>
+                    <div class="wireframe-section">
+                        <h4>Supported Services</h4>
+                        <div class="wireframe-box" style="text-align: left;">
+                            ✓ Google Drive<br/>
+                            ✓ Dropbox<br/>
+                            ✓ Box.com
+                        </div>
+                    </div>
+                </div>
+                <div class="note">Phase 0c: URL検証・ホワイトリスト実装</div>
+            </div>
+
+            <!-- Modals -->
+            <div class="card">
+                <span class="card-label admin">Components: Modals</span>
+                <h3>🪟 Dialog Patterns</h3>
+                <div class="wireframe">
+                    <div class="wireframe-section">
+                        <h4>Delete Project Modal (Phase A-3)</h4>
+                        <div class="wireframe-box" style="background: #ffebee;">
+                            Warning: Deleting "ProjectX"<br/>
+                            Channels to delete:<br/>
+                            • #layout<br/>
+                            • #animation<br/>
+                            • #compositing<br/>
+                            Input: Type "delete" to confirm
+                        </div>
+                    </div>
+                    <div class="wireframe-section">
+                        <h4>Delete User Confirm (Phase A-4)</h4>
+                        <div class="wireframe-box" style="background: #fff3e0;">
+                            Are you sure?<br/>
+                            This user will not get @mentions.
+                        </div>
+                    </div>
+                    <div class="wireframe-section">
+                        <h4>Error Modal</h4>
+                        <div class="wireframe-box" style="background: #ffebee;">
+                            Error: Failed to create webhook<br/>
+                            Check Discord permissions.
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- TAB 4: DISCORD MESSAGES -->
+    <div id="messages" class="canvas-container">
+        <div class="cards-row">
+            <!-- Normal Update -->
+            <div class="card">
+                <span class="card-label message">Message Type: Normal</span>
+                <h3>📝 Task Status Update</h3>
+                <div class="message-bubble success">
+📋 TaskName が更新されました
+
+Entity: ShotA-001
+Task Type: Animation
+Status: WIP → READY
+
+Assigned To: @alice
+Modified At: 2026-05-07 14:30:45
+                </div>
+                <p style="font-size: 0.85rem; color: #666; margin-top: 1rem;">
+                    <strong>発生:</strong> Task Status が変化したとき（WIP→READY など）
+                </p>
+            </div>
+
+            <!-- Assign Notification (Phase A-1) -->
+            <div class="card">
+                <span class="card-label message">Message Type: Assign (Phase A-1)</span>
+                <h3>📋 New Task Assignment</h3>
+                <div class="message-bubble info">
+📋 タスクがアサインされました
+
+Entity: ShotB-003
+Task Type: Layout
+Status: TODO → WIP
+
+Assigned To: @bob
+Description: Main scene composition
+Priority: High
+
+✅ Action: Open in Kitsu
+                </div>
+                <p style="font-size: 0.85rem; color: #666; margin-top: 1rem;">
+                    <strong>発生:</strong> Task Status が NONE（TODO）→ 他へ（conf.toml の notifyOnAssign=true のとき）
+                </p>
+            </div>
+
+            <!-- Retake Transition (Phase A-2) -->
+            <div class="card">
+                <span class="card-label message">Message Type: Transitions (Phase A-2)</span>
+                <h3>🔄 RETAKE ↔ WIP</h3>
+                <div class="message-bubble warning">
+🔄 修正中にリテイクへ戻りました
+
+Entity: ShotC-002
+Task Type: Compositing
+Status: WIP → RETAKE
+
+Assigned To: @charlie
+Notes: Color timing adjustment needed
+                </div>
+                <div class="message-bubble">
+🔧 リテイク修正を開始しました
+
+Entity: ShotC-002
+Task Type: Compositing
+Status: RETAKE → WIP
+
+Assigned To: @charlie
+Modified At: 2026-05-07 15:45:22
+                </div>
+                <p style="font-size: 0.85rem; color: #666; margin-top: 1rem;">
+                    <strong>発生:</strong> RETAKE ↔ WIP 遷移（transitionMessage() に追加）
+                </p>
+            </div>
+
+            <!-- With Mention -->
+            <div class="card">
+                <span class="card-label message">Message Type: WFA (Mention)</span>
+                <h3>🔔 WFA Status (Waiting for Approval)</h3>
+                <div class="message-bubble info">
+⏸️ 確認待ち
+
+Entity: ShotD-001
+Task Type: Final Render
+Status: WIP → WFA
+
+Checker: @supervisor
+Notes: Ready for final sign-off
+                </div>
+                <p style="font-size: 0.85rem; color: #666; margin-top: 1rem;">
+                    <strong>発生:</strong> Task Status が WFA になったとき（checkers map に登録されたユーザーに @mention）
+                </p>
+            </div>
+
+            <!-- By Entity Type -->
+            <div class="card">
+                <span class="card-label message">Examples: Entity Types</span>
+                <h3>🎬 Entity Type 別表示</h3>
+                <div class="message-bubble">
+<strong>Sequence Level:</strong><br/>
+📹 Sequence: Episode-001<br/>
+Task: Color Grading<br/>
+Status: WIP
+                </div>
+                <div class="message-bubble">
+<strong>Asset Level:</strong><br/>
+🎨 Asset: Character_Alice<br/>
+Task: Shading<br/>
+Status: READY
+                </div>
+                <div class="message-bubble">
+<strong>Shot Level:</strong><br/>
+🎥 Shot: ShotA-001<br/>
+Task: Animation<br/>
+Status: WIP → RETAKE
+                </div>
+                <p style="font-size: 0.85rem; color: #666; margin-top: 1rem;">
+                    <strong>実装:</strong> Phase 0b で entity_type 判定を強化
+                </p>
+            </div>
+
+            <!-- Error / Warning -->
+            <div class="card">
+                <span class="card-label message">Messages: System</span>
+                <h3>⚠️ Errors & Warnings</h3>
+                <div class="message-bubble error">
+❌ Webhook Error
+
+Failed to send message for Task: ShotX-999
+Error: 404 Not Found
+Retry attempt: 3/5
+
+Admin UI で再試行してください
+                </div>
+                <div class="message-bubble warning">
+⚠️ Configuration Warning
+
+チェッカーが設定されていません:
+- Animation
+- FX
+
+Admin UI で設定してください
+                </div>
+                <div class="message-bubble">
+✅ Configuration Updated
+
+Discord Category created: #project-animations
+Webhooks: 8/12 registered
+                </div>
+            </div>
+
+            <!-- Rich Formatting (future) -->
+            <div class="card">
+                <span class="card-label message">Message Type: Rich (Future)</span>
+                <h3>✨ Rich Message Format</h3>
+                <div class="message-bubble" style="background: #f0f0f0; border-left-color: #999;">
+[Discord Embed Format]
+
+Title: Task Updated
+Color: #4CAF50 (green)
+
+Fields:
+├─ Entity: ShotA-001
+├─ Task Type: Animation
+├─ Status: WIP → READY
+├─ Assigned: @alice
+├─ Priority: High
+├─ Duration: 2d 5h
+└─ Attachment: Thumbnail
+
+Button: [Open in Kitsu]
+                </div>
+                <p style="font-size: 0.85rem; color: #666; margin-top: 1rem;">
+                    <strong>候補:</strong> Phase C で discord.go にEmbedフォーマット追加
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <!-- TAB 5: ENTITY & TASK MAPPING -->
+    <div id="entity-mapping" class="canvas-container">
+        <div class="cards-row">
+            <!-- Entity Classification -->
+            <div class="card">
+                <span class="card-label diagram">Classification</span>
+                <h3>🗂️ Entity Type Hierarchy (Phase 0b)</h3>
+                <svg viewBox="0 0 480 300" xmlns="http://www.w3.org/2000/svg">
+                    <!-- Root -->
+                    <rect x="180" y="20" width="120" height="50" fill="none" stroke="#333" stroke-width="2" rx="4"/>
+                    <text x="240" y="48" font-size="13" font-weight="600" text-anchor="middle">Project</text>
+
+                    <!-- Three branches -->
+                    <path d="M 240 70 L 100 120" stroke="#333" stroke-width="2"/>
+                    <path d="M 240 70 L 240 120" stroke="#333" stroke-width="2"/>
+                    <path d="M 240 70 L 380 120" stroke="#333" stroke-width="2"/>
+
+                    <!-- Sequence -->
+                    <rect x="40" y="120" width="120" height="50" fill="none" stroke="#333" stroke-width="2" rx="4"/>
+                    <text x="100" y="142" font-size="12" font-weight="600" text-anchor="middle">Sequence</text>
+                    <text x="100" y="160" font-size="10" text-anchor="middle" fill="#666">(Episode, Acta)</text>
+
+                    <!-- Shot -->
+                    <rect x="180" y="120" width="120" height="50" fill="none" stroke="#333" stroke-width="2" rx="4"/>
+                    <text x="240" y="148" font-size="12" font-weight="600" text-anchor="middle">Shot</text>
+                    <text x="240" y="166" font-size="10" text-anchor="middle" fill="#666">(Camera setup)</text>
+
+                    <!-- Asset -->
+                    <rect x="320" y="120" width="120" height="50" fill="none" stroke="#333" stroke-width="2" rx="4"/>
+                    <text x="380" y="148" font-size="12" font-weight="600" text-anchor="middle">Asset</text>
+                    <text x="380" y="166" font-size="10" text-anchor="middle" fill="#666">(Character, Prop)</text>
+
+                    <!-- Sub-entities -->
+                    <text x="100" y="210" font-size="10" font-weight="600" fill="#333">Tasks in Sequence:</text>
+                    <text x="100" y="225" font-size="9" fill="#666">• Script, Concept, Design, Edit</text>
+                    <text x="100" y="237" font-size="9" fill="#666">• Color Grading, Sound</text>
+
+                    <text x="240" y="210" font-size="10" font-weight="600" fill="#333">Tasks in Shot:</text>
+                    <text x="240" y="225" font-size="9" fill="#666">• Layout, Animation, FX, Lighting</text>
+                    <text x="240" y="237" font-size="9" fill="#666">• Rendering, Compositing</text>
+
+                    <text x="380" y="210" font-size="10" font-weight="600" fill="#333">Tasks in Asset:</text>
+                    <text x="380" y="225" font-size="9" fill="#666">• Modeling, Rigging</text>
+                    <text x="380" y="237" font-size="9" fill="#666">• Shading, Texturing</text>
+                </svg>
+                <div class="note">Phase 0b: templates.go にSequenceChannels / AssetChannels / ShotChannels を分離</div>
+            </div>
+
+            <!-- CG Task Matrix -->
+            <div class="card">
+                <span class="card-label diagram">Project Type: CG</span>
+                <h3>🎥 CG/VFX Task Types</h3>
+                <div class="table-grid">
+                    <div class="table-row header">
+                        <div class="table-cell">Entity</div>
+                        <div class="table-cell">Tasks</div>
+                        <div class="table-cell">Discord Channel</div>
+                    </div>
+                    <div class="table-row">
+                        <div class="table-cell"><strong>Sequence</strong></div>
+                        <div class="table-cell">Concept, Design, Edit, Color Grading, Sound</div>
+                        <div class="table-cell">#concept, #edit, #color</div>
+                    </div>
+                    <div class="table-row">
+                        <div class="table-cell"><strong>Asset</strong></div>
+                        <div class="table-cell">Modeling, Rigging, Shading</div>
+                        <div class="table-cell">#modeling, #rigging, #shading</div>
+                    </div>
+                    <div class="table-row">
+                        <div class="table-cell"><strong>Shot</strong></div>
+                        <div class="table-cell">Layout, Animation, FX, Lighting, Rendering, Compositing</div>
+                        <div class="table-cell">#layout, #animation, #fx, #lighting, #render, #comp</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Anime Task Matrix -->
+            <div class="card">
+                <span class="card-label diagram">Project Type: Anime</span>
+                <h3>🎨 アニメ Task Types</h3>
+                <div class="table-grid">
+                    <div class="table-row header">
+                        <div class="table-cell">Entity</div>
+                        <div class="table-cell">Tasks</div>
+                        <div class="table-cell">Discord Channel</div>
+                    </div>
+                    <div class="table-row">
+                        <div class="table-cell"><strong>Sequence</strong></div>
+                        <div class="table-cell">Script, Storyboard, Concept Art</div>
+                        <div class="table-cell">#concept, #storyboard</div>
+                    </div>
+                    <div class="table-row">
+                        <div class="table-cell"><strong>Episode</strong></div>
+                        <div class="table-cell">Edit, Sound Design, Color Correction</div>
+                        <div class="table-cell">#edit, #sound, #color</div>
+                    </div>
+                    <div class="table-row">
+                        <div class="table-cell"><strong>Shot</strong></div>
+                        <div class="table-cell">Key Animation, In-between, Coloring</div>
+                        <div class="table-cell">#animation, #inbetween, #coloring</div>
+                    </div>
+                    <div class="table-row">
+                        <div class="table-cell"><strong>Asset</strong></div>
+                        <div class="table-cell">Background Art, Prop Design</div>
+                        <div class="table-cell">#background, #props</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Template Variables -->
+            <div class="card">
+                <span class="card-label diagram">Config: Template</span>
+                <h3>⚙️ Template Definition (Phase 0b)</h3>
+                <div class="wireframe">
+                    <div class="wireframe-section">
+                        <h4>ChannelDef Structure</h4>
+                        <code style="display: block; padding: 0.5rem; background: white;">
+type ChannelDef struct {<br/>
+&nbsp;&nbsp;NameJP     string  // 日本語表示<br/>
+&nbsp;&nbsp;NameEN     string  // 英語ID<br/>
+&nbsp;&nbsp;TaskType   string  // Kitsuタスク型<br/>
+&nbsp;&nbsp;EntityType string  // shot/asset/seq<br/>
+}
+                        </code>
+                    </div>
+                    <div class="wireframe-section">
+                        <h4>ProjectTemplate Structure</h4>
+                        <code style="display: block; padding: 0.5rem; background: white;">
+type ProjectTemplate struct {<br/>
+&nbsp;&nbsp;LabelJP          string<br/>
+&nbsp;&nbsp;LabelEN          string<br/>
+&nbsp;&nbsp;SequenceChannels []ChannelDef<br/>
+&nbsp;&nbsp;AssetChannels    []ChannelDef<br/>
+&nbsp;&nbsp;ShotChannels     []ChannelDef<br/>
+}
+                        </code>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- TAB 6: PHASE ROADMAP -->
+    <div id="phase-roadmap" class="canvas-container">
+        <div class="cards-row">
+            <!-- Phase A -->
+            <div class="card">
+                <span class="card-label" style="background: #ffcdd2; color: #c62828;">Phase A</span>
+                <h3>🔴 Immediate Fixes (1-2h)</h3>
+                <div class="table-grid">
+                    <div class="table-row header">
+                        <div class="table-cell">Issue</div>
+                        <div class="table-cell">Fix</div>
+                    </div>
+                    <div class="table-row">
+                        <div class="table-cell">A-1: TODO skip</div>
+                        <div class="table-cell">Add notifyOnAssign config</div>
+                    </div>
+                    <div class="table-row">
+                        <div class="table-cell">A-2: RETAKE message</div>
+                        <div class="table-cell">Add transition messages</div>
+                    </div>
+                    <div class="table-row">
+                        <div class="table-cell">A-3: Delete channels</div>
+                        <div class="table-cell">Show channel list in modal</div>
+                    </div>
+                    <div class="table-row">
+                        <div class="table-cell">A-4: User delete</div>
+                        <div class="table-cell">Add confirm dialog</div>
+                    </div>
+                    <div class="table-row">
+                        <div class="table-cell">A-5: Discord ID validation</div>
+                        <div class="table-cell">Regex pattern check (17-19 digits)</div>
+                    </div>
+                    <div class="table-row">
+                        <div class="table-cell">A-6: Message replace error</div>
+                        <div class="table-cell">Clear messageID on fail</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Phase 0b/0c -->
+            <div class="card">
+                <span class="card-label" style="background: #ffe0b2; color: #e65100;">Phase 0b + 0c</span>
+                <h3>🟡 Structural Improvements (1day)</h3>
+                <div class="table-grid">
+                    <div class="table-row header">
+                        <div class="table-cell">Task</div>
+                        <div class="table-cell">Details</div>
+                    </div>
+                    <div class="table-row">
+                        <div class="table-cell">Phase 0b</div>
+                        <div class="table-cell">Separate templates: Seq/Asset/Shot</div>
+                    </div>
+                    <div class="table-row">
+                        <div class="table-cell">Phase 0c</div>
+                        <div class="table-cell">URL validation + whitelist</div>
+                    </div>
+                    <div class="table-row">
+                        <div class="table-cell">Feature 1</div>
+                        <div class="table-cell">Project channel management UI</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Phase B -->
+            <div class="card">
+                <span class="card-label" style="background: #ffe0b2; color: #e65100;">Phase B</span>
+                <h3>🟡 UX Improvements (3-5h)</h3>
+                <div class="table-grid">
+                    <div class="table-row header">
+                        <div class="table-cell">Issue</div>
+                        <div class="table-cell">Solution</div>
+                    </div>
+                    <div class="table-row">
+                        <div class="table-cell">B-1: Checker validation</div>
+                        <div class="table-cell">Startup warning + list</div>
+                    </div>
+                    <div class="table-row">
+                        <div class="table-cell">B-2: Type selection</div>
+                        <div class="table-cell">Add explanation details</div>
+                    </div>
+                    <div class="table-row">
+                        <div class="table-cell">B-3: Entity type</div>
+                        <div class="table-cell">Strong Episode classification</div>
+                    </div>
+                    <div class="table-row">
+                        <div class="table-cell">B-4: Checker visibility</div>
+                        <div class="table-cell">Group by Discord ID</div>
+                    </div>
+                    <div class="table-row">
+                        <div class="table-cell">B-2: Routing complexity</div>
+                        <div class="table-cell">Logging + debug output</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Phase C -->
+            <div class="card">
+                <span class="card-label" style="background: #c8e6c9; color: #2e7d32;">Phase C</span>
+                <h3>🟢 Future Enhancements</h3>
+                <div class="table-grid">
+                    <div class="table-row header">
+                        <div class="table-cell">Feature</div>
+                        <div class="table-cell">Complexity</div>
+                    </div>
+                    <div class="table-row">
+                        <div class="table-cell">C-1: Per-task mentions</div>
+                        <div class="table-cell">Large</div>
+                    </div>
+                    <div class="table-row">
+                        <div class="table-cell">C-2: Routing logs</div>
+                        <div class="table-cell">Large</div>
+                    </div>
+                    <div class="table-row">
+                        <div class="table-cell">C-3: Multi-storage</div>
+                        <div class="table-cell">Large</div>
+                    </div>
+                    <div class="table-row">
+                        <div class="table-cell">C-4: Dynamic templates</div>
+                        <div class="table-cell">Medium</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Implementation Order -->
+            <div class="card">
+                <span class="card-label diagram">Timeline</span>
+                <h3>📅 Recommended Order</h3>
+                <svg viewBox="0 0 480 320" xmlns="http://www.w3.org/2000/svg">
+                    <!-- Day 1 -->
+                    <rect x="20" y="20" width="100" height="50" fill="#ffcdd2" stroke="#c62828" stroke-width="2" rx="4"/>
+                    <text x="70" y="40" font-size="11" font-weight="600" text-anchor="middle">Day 1</text>
+                    <text x="70" y="57" font-size="9" text-anchor="middle" fill="#333">Phase A</text>
+
+                    <!-- Day 2 -->
+                    <rect x="130" y="20" width="100" height="50" fill="#ffe0b2" stroke="#e65100" stroke-width="2" rx="4"/>
+                    <text x="180" y="40" font-size="11" font-weight="600" text-anchor="middle">Day 2</text>
+                    <text x="180" y="57" font-size="9" text-anchor="middle" fill="#333">0b+0c</text>
+
+                    <!-- Day 3 -->
+                    <rect x="240" y="20" width="100" height="50" fill="#ffe0b2" stroke="#e65100" stroke-width="2" rx="4"/>
+                    <text x="290" y="40" font-size="11" font-weight="600" text-anchor="middle">Day 3</text>
+                    <text x="290" y="57" font-size="9" text-anchor="middle" fill="#333">Feature 1</text>
+
+                    <!-- Day 4-7 -->
+                    <rect x="350" y="20" width="110" height="50" fill="#ffe0b2" stroke="#e65100" stroke-width="2" rx="4"/>
+                    <text x="405" y="40" font-size="11" font-weight="600" text-anchor="middle">Days 4-7</text>
+                    <text x="405" y="57" font-size="9" text-anchor="middle" fill="#333">Phase B</text>
+
+                    <!-- Arrows -->
+                    <path d="M 120 45 L 130 45" stroke="#333" stroke-width="2" marker-end="url(#arrow)"/>
+                    <path d="M 230 45 L 240 45" stroke="#333" stroke-width="2" marker-end="url(#arrow)"/>
+                    <path d="M 340 45 L 350 45" stroke="#333" stroke-width="2" marker-end="url(#arrow)"/>
+
+                    <!-- Details -->
+                    <text x="70" y="100" font-size="10" font-weight="600" fill="#333">6 quick fixes</text>
+                    <text x="70" y="115" font-size="9" fill="#666">Data integrity</text>
+                    <text x="70" y="128" font-size="9" fill="#666">User experience</text>
+
+                    <text x="180" y="100" font-size="10" font-weight="600" fill="#333">Template restructure</text>
+                    <text x="180" y="115" font-size="9" fill="#666">URL validation</text>
+                    <text x="180" y="128" font-size="9" fill="#666">Security ready</text>
+
+                    <text x="290" y="100" font-size="10" font-weight="600" fill="#333">Channel management</text>
+                    <text x="290" y="115" font-size="9" fill="#666">Admin UI expansion</text>
+                    <text x="290" y="128" font-size="9" fill="#666">Production ready</text>
+
+                    <text x="405" y="100" font-size="10" font-weight="600" fill="#333">Polish & refinement</text>
+                    <text x="405" y="115" font-size="9" fill="#666">Validation, docs</text>
+                    <text x="405" y="128" font-size="9" fill="#666">Edge cases</text>
+
+                    <!-- Total -->
+                    <rect x="20" y="160" width="440" height="50" fill="none" stroke="#333" stroke-width="2" rx="4"/>
+                    <text x="240" y="185" font-size="12" font-weight="600" text-anchor="middle">Total Implementation: ~2.5 days</text>
+                    <text x="240" y="202" font-size="10" text-anchor="middle" fill="#666">(Parallel testing, documentation)</text>
+                </svg>
+            </div>
+        </div>
+    </div>
+
+    <!-- TAB 7: WORKFLOWS -->
+    <div id="workflows" class="canvas-container">
+        <div class="cards-row">
+            <!-- Setup Workflow -->
+            <div class="card">
+                <span class="card-label workflow">User Journey</span>
+                <h3>👤 Initial Setup Workflow</h3>
+                <svg viewBox="0 0 480 400" xmlns="http://www.w3.org/2000/svg">
+                    <!-- Start -->
+                    <circle cx="240" cy="30" r="15" fill="#333"/>
+                    <text x="240" y="35" font-size="10" fill="white" text-anchor="middle" font-weight="600">1</text>
+                    <text x="240" y="55" font-size="11" font-weight="600" text-anchor="middle">Admin Access</text>
+
+                    <!-- Create Project -->
+                    <rect x="140" y="70" width="200" height="50" fill="none" stroke="#333" stroke-width="2" rx="4"/>
+                    <text x="240" y="95" font-size="11" font-weight="600" text-anchor="middle">Create Project</text>
+                    <text x="240" y="110" font-size="9" text-anchor="middle" fill="#666">(Kitsu ID + Discord Guild)</text>
+                    <path d="M 240 45 L 240 70" stroke="#333" stroke-width="2" marker-end="url(#arrow)"/>
+
+                    <circle cx="420" cy="95" r="15" fill="#333"/>
+                    <text x="420" y="100" font-size="10" fill="white" text-anchor="middle" font-weight="600">2</text>
+
+                    <!-- Select Template -->
+                    <path d="M 340 95 L 400 95" stroke="#333" stroke-width="2" marker-end="url(#arrow)"/>
+                    <rect x="140" y="150" width="200" height="50" fill="none" stroke="#333" stroke-width="2" rx="4"/>
+                    <text x="240" y="175" font-size="11" font-weight="600" text-anchor="middle">Select Template</text>
+                    <text x="240" y="190" font-size="9" text-anchor="middle" fill="#666">(CG / 実写 / アニメ)</text>
+                    <path d="M 240 120 L 240 150" stroke="#333" stroke-width="2" marker-end="url(#arrow)"/>
+
+                    <circle cx="420" cy="175" r="15" fill="#333"/>
+                    <text x="420" y="180" font-size="10" fill="white" text-anchor="middle" font-weight="600">3</text>
+
+                    <!-- Auto-create Channels -->
+                    <path d="M 340 175 L 400 175" stroke="#333" stroke-width="2" marker-end="url(#arrow)"/>
+                    <rect x="140" y="230" width="200" height="50" fill="none" stroke="#333" stroke-width="2" rx="4"/>
+                    <text x="240" y="255" font-size="11" font-weight="600" text-anchor="middle">Auto-Create Channels</text>
+                    <text x="240" y="270" font-size="9" text-anchor="middle" fill="#666">(+ Webhooks)</text>
+                    <path d="M 240 200 L 240 230" stroke="#333" stroke-width="2" marker-end="url(#arrow)"/>
+
+                    <circle cx="420" cy="255" r="15" fill="#333"/>
+                    <text x="420" y="260" font-size="10" fill="white" text-anchor="middle" font-weight="600">4</text>
+
+                    <!-- Map Users -->
+                    <path d="M 340 255 L 400 255" stroke="#333" stroke-width="2" marker-end="url(#arrow)"/>
+                    <rect x="140" y="310" width="200" height="50" fill="none" stroke="#333" stroke-width="2" rx="4"/>
+                    <text x="240" y="335" font-size="11" font-weight="600" text-anchor="middle">Map Kitsu → Discord Users</text>
+                    <text x="240" y="350" font-size="9" text-anchor="middle" fill="#666">(For mentions)</text>
+                    <path d="M 240 280 L 240 310" stroke="#333" stroke-width="2" marker-end="url(#arrow)"/>
+
+                    <circle cx="420" cy="335" r="15" fill="#333"/>
+                    <text x="420" y="340" font-size="10" fill="white" text-anchor="middle" font-weight="600">5</text>
+                </svg>
+            </div>
+
+            <!-- Daily Operation -->
+            <div class="card">
+                <span class="card-label workflow">Daily Operation</span>
+                <h3>🔄 Production Workflow</h3>
+                <svg viewBox="0 0 480 350" xmlns="http://www.w3.org/2000/svg">
+                    <!-- Kitsu Task Update -->
+                    <rect x="120" y="20" width="240" height="50" fill="none" stroke="#333" stroke-width="2" rx="4"/>
+                    <text x="240" y="45" font-size="11" font-weight="600" text-anchor="middle">Artist Updates Task in Kitsu</text>
+                    <text x="240" y="60" font-size="9" text-anchor="middle" fill="#666">(Status change, comment, etc.)</text>
+
+                    <!-- Bot Polls -->
+                    <path d="M 240 70 L 240 100" stroke="#333" stroke-width="2" marker-end="url(#arrow)"/>
+                    <rect x="120" y="100" width="240" height="50" fill="none" stroke="#333" stroke-width="2" rx="4"/>
+                    <text x="240" y="125" font-size="11" font-weight="600" text-anchor="middle">Bot Polls Kitsu API</text>
+                    <text x="240" y="140" font-size="9" text-anchor="middle" fill="#666">(Every 30 sec)</text>
+
+                    <!-- Detect Change -->
+                    <path d="M 240 150 L 240 180" stroke="#333" stroke-width="2" marker-end="url(#arrow)"/>
+                    <rect x="120" y="180" width="240" height="50" fill="none" stroke="#333" stroke-width="2" rx="4"/>
+                    <text x="240" y="205" font-size="11" font-weight="600" text-anchor="middle">Detect Status Change</text>
+                    <text x="240" y="220" font-size="9" text-anchor="middle" fill="#666">(Compare DB vs. Kitsu)</text>
+
+                    <!-- Send Notification -->
+                    <path d="M 240 230 L 240 260" stroke="#333" stroke-width="2" marker-end="url(#arrow)"/>
+                    <rect x="120" y="260" width="240" height="50" fill="none" stroke="#333" stroke-width="2" rx="4"/>
+                    <text x="240" y="285" font-size="11" font-weight="600" text-anchor="middle">Send Notification to Discord</text>
+                    <text x="240" y="300" font-size="9" text-anchor="middle" fill="#666">(Via Webhook URL)</text>
+
+                    <!-- Team Notified -->
+                    <path d="M 240 310 L 240 330" stroke="#2e7d32" stroke-width="2" marker-end="url(#arrow)"/>
+                    <circle cx="240" cy="340" r="10" fill="#2e7d32"/>
+                    <text x="240" y="343" font-size="10" fill="white" text-anchor="middle" font-weight="600">✓</text>
+                </svg>
+                <p style="font-size: 0.85rem; color: #666; margin-top: 1rem;">
+                    このループが継続的に実行されます（変更がある限り）
+                </p>
+            </div>
+
+            <!-- Troubleshooting -->
+            <div class="card">
+                <span class="card-label workflow">Troubleshooting</span>
+                <h3>🔧 Issue Resolution</h3>
+                <svg viewBox="0 0 480 380" xmlns="http://www.w3.org/2000/svg">
+                    <!-- Problem -->
+                    <rect x="120" y="20" width="240" height="50" fill="#ffebee" stroke="#c62828" stroke-width="2" rx="4"/>
+                    <text x="240" y="45" font-size="11" font-weight="600" text-anchor="middle" fill="#c62828">❌ Problem</text>
+                    <text x="240" y="60" font-size="9" text-anchor="middle" fill="#b71c1c">(No notification sent)</text>
+
+                    <!-- Decision -->
+                    <path d="M 240 70 L 240 100" stroke="#c62828" stroke-width="2" marker-end="url(#arrow)"/>
+                    <rect x="120" y="100" width="240" height="50" fill="none" stroke="#c62828" stroke-width="2" rx="4"/>
+                    <text x="240" y="125" font-size="11" font-weight="600" text-anchor="middle">Check Admin UI Logs</text>
+                    <text x="240" y="140" font-size="9" text-anchor="middle" fill="#666">(Webhook errors?)</text>
+
+                    <!-- Branch 1 -->
+                    <path d="M 120 125 L 60 170" stroke="#c62828" stroke-width="2" marker-end="url(#arrow)"/>
+                    <text x="90" y="145" font-size="9" fill="#c62828">Webhook</text>
+
+                    <rect x="10" y="170" width="100" height="50" fill="none" stroke="#c62828" stroke-width="2" rx="4"/>
+                    <text x="60" y="190" font-size="9" font-weight="600" text-anchor="middle">Recreate Webhook</text>
+                    <text x="60" y="203" font-size="8" text-anchor="middle" fill="#666">(via Admin UI)</text>
+
+                    <!-- Branch 2 -->
+                    <path d="M 360 125 L 420 170" stroke="#c62828" stroke-width="2" marker-end="url(#arrow)"/>
+                    <text x="385" y="145" font-size="9" fill="#c62828">User Map</text>
+
+                    <rect x="370" y="170" width="100" height="50" fill="none" stroke="#c62828" stroke-width="2" rx="4"/>
+                    <text x="420" y="190" font-size="9" font-weight="600" text-anchor="middle">Add User Mapping</text>
+                    <text x="420" y="203" font-size="8" text-anchor="middle" fill="#666">(Kitsu → Discord)</text>
+
+                    <!-- Branch 3 -->
+                    <path d="M 240 150 L 240 190" stroke="#ff9800" stroke-width="2" marker-end="url(#arrow)"/>
+                    <text x="275" y="165" font-size="9" fill="#ff9800">Config</text>
+
+                    <rect x="180" y="190" width="120" height="50" fill="none" stroke="#ff9800" stroke-width="2" rx="4"/>
+                    <text x="240" y="210" font-size="9" font-weight="600" text-anchor="middle">Check Config</text>
+                    <text x="240" y="223" font-size="8" text-anchor="middle" fill="#666">(Checker, URL)</text>
+
+                    <!-- Resolution -->
+                    <path d="M 60 220 L 150 280" stroke="#2e7d32" stroke-width="2"/>
+                    <path d="M 420 220 L 330 280" stroke="#2e7d32" stroke-width="2"/>
+                    <path d="M 240 240 L 240 280" stroke="#2e7d32" stroke-width="2"/>
+
+                    <rect x="120" y="280" width="240" height="50" fill="#e8f5e9" stroke="#2e7d32" stroke-width="2" rx="4"/>
+                    <text x="240" y="305" font-size="11" font-weight="600" text-anchor="middle" fill="#2e7d32">✅ Retry Message</text>
+                    <text x="240" y="320" font-size="9" text-anchor="middle" fill="#1b5e20">(or auto-resend)</text>
+                </svg>
+            </div>
+
+            <!-- Configuration Checklist -->
+            <div class="card">
+                <span class="card-label workflow">Checklist</span>
+                <h3>✓ Pre-Launch Checklist</h3>
+                <div class="table-grid">
+                    <div class="table-row header">
+                        <div class="table-cell">Item</div>
+                        <div class="table-cell">Status</div>
+                    </div>
+                    <div class="table-row">
+                        <div class="table-cell">Kitsu API credentials</div>
+                        <div class="table-cell">☐ Set in .env</div>
+                    </div>
+                    <div class="table-row">
+                        <div class="table-cell">Discord Bot token</div>
+                        <div class="table-cell">☐ Set in .env</div>
+                    </div>
+                    <div class="table-row">
+                        <div class="table-cell">Discord Guild ID</div>
+                        <div class="table-cell">☐ Set in .env</div>
+                    </div>
+                    <div class="table-row">
+                        <div class="table-cell">Project created</div>
+                        <div class="table-cell">☐ In Admin UI</div>
+                    </div>
+                    <div class="table-row">
+                        <div class="table-cell">Template selected</div>
+                        <div class="table-cell">☐ (CG/実写/アニメ)</div>
+                    </div>
+                    <div class="table-row">
+                        <div class="table-cell">Channels created</div>
+                        <div class="table-cell">☐ In Discord</div>
+                    </div>
+                    <div class="table-row">
+                        <div class="table-cell">Webhooks registered</div>
+                        <div class="table-cell">☐ In Database</div>
+                    </div>
+                    <div class="table-row">
+                        <div class="table-cell">User mapping</div>
+                        <div class="table-cell">☐ Kitsu ↔ Discord</div>
+                    </div>
+                    <div class="table-row">
+                        <div class="table-cell">Checker assignment</div>
+                        <div class="table-cell">☐ For WFA tasks</div>
+                    </div>
+                    <div class="table-row">
+                        <div class="table-cell">Test message</div>
+                        <div class="table-cell">☐ Sent & received</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- TAB 8: PHASE 2-2 FEATURES -->
+    <div id="phase-2-2-features" class="canvas-container">
+        <div class="cards-row">
+            <!-- DCC Tools Direct Link -->
+            <div class="card">
+                <span class="card-label workflow">🎬 DCC Direct Link</span>
+                <h3>Phase 2-2-1: vfx-launcher Integration</h3>
+                <div style="margin: 1rem 0; padding: 1rem; background: #f5f5f5; border-radius: 4px;">
+                    <p style="font-size: 0.9rem; margin-bottom: 0.5rem;"><strong>✨ What's New:</strong></p>
+                    <ul style="font-size: 0.85rem; line-height: 1.8; margin-left: 1rem;">
+                        <li>URL Scheme: <code>vfx-launcher://open?software=maya&path=...</code></li>
+                        <li>Supported DCC: Maya 🟢 / Nuke 🔴 / Blender 🟠 / Houdini 🟡 / Katana 🟣</li>
+                        <li>Cross-platform path mapping: /mnt/projects → C:\projects (Windows) → /Volumes/projects (macOS)</li>
+                        <li>Discord Action Row buttons with automatic file opening</li>
+                        <li>Admin UI: /bot/admin/dcc-tools, /bot/admin/path-mapping</li>
+                    </ul>
+                    <p style="font-size: 0.9rem; margin-top: 1rem;"><strong>📊 Data Tables:</strong> ProjectDCCTool, PathMapping, FilePathPreset</p>
+                </div>
+            </div>
+
+            <!-- Error Retry Mechanisms -->
+            <div class="card">
+                <span class="card-label warning">⚠️ Error Handling</span>
+                <h3>Phase 2-2-2: Smart Retry Logic</h3>
+                <div style="margin: 1rem 0; padding: 1rem; background: #fff3e0; border-radius: 4px;">
+                    <p style="font-size: 0.9rem; margin-bottom: 0.5rem;"><strong>✨ What's New:</strong></p>
+                    <ul style="font-size: 0.85rem; line-height: 1.8; margin-left: 1rem;">
+                        <li><strong>429 (Rate Limited)</strong> → Respect Retry-After header + exponential backoff</li>
+                        <li><strong>5xx (Server Error)</strong> → Exponential backoff: 1s → 2s → 4s (max 3 retries)</li>
+                        <li><strong>4xx (Client Error)</strong> → No retry (immediate failure)</li>
+                        <li>Auto-detection of transient vs permanent failures</li>
+                        <li>Comprehensive error logging for debugging</li>
+                    </ul>
+                    <p style="font-size: 0.9rem; margin-top: 1rem;"><strong>🎯 Result:</strong> Higher success rates, better error transparency</p>
+                </div>
+            </div>
+
+            <!-- Audit Logging -->
+            <div class="card">
+                <span class="card-label message">📋 Audit Trail</span>
+                <h3>Phase 2-2-3: Message Audit Log</h3>
+                <div style="margin: 1rem 0; padding: 1rem; background: #e8f5e9; border-radius: 4px;">
+                    <p style="font-size: 0.9rem; margin-bottom: 0.5rem;"><strong>✨ What's New:</strong></p>
+                    <ul style="font-size: 0.85rem; line-height: 1.8; margin-left: 1rem;">
+                        <li>AuditLog table: tracks every Discord message sent/failed</li>
+                        <li>Recorded data: task_id, status, success/failure, retry_count, error_message, Discord message ID</li>
+                        <li>UI: /bot/admin/audit displays last 200 records with timestamps</li>
+                        <li>Auto-purge: logs older than 30 days deleted automatically</li>
+                        <li>Color-coded display: ✅ Success (green) / ❌ Failure (red)</li>
+                    </ul>
+                    <p style="font-size: 0.9rem; margin-top: 1rem;"><strong>🔍 Use Case:</strong> Troubleshooting, compliance tracking, performance monitoring</p>
+                </div>
+            </div>
+
+            <!-- Role Mention Filtering -->
+            <div class="card">
+                <span class="card-label admin">🔔 Role Filtering</span>
+                <h3>Phase 2-2-4: Intelligent @Mention Rules</h3>
+                <div style="margin: 1rem 0; padding: 1rem; background: #f3e5f5; border-radius: 4px;">
+                    <p style="font-size: 0.9rem; margin-bottom: 0.5rem;"><strong>✨ What's New:</strong></p>
+                    <ul style="font-size: 0.85rem; line-height: 1.8; margin-left: 1rem;">
+                        <li>MentionRule table: TaskType × Status → Discord Role ID mapping</li>
+                        <li>Example: "Compositing" + "WFA" (Waiting For Approval) → @Reviewers role</li>
+                        <li>Wildcard support: Empty TaskType/Status = "apply to all"</li>
+                        <li>Admin UI: /bot/admin/mention-rules for easy rule configuration</li>
+                        <li>Precedence: Specific rule > wildcard rule (automatic optimization)</li>
+                    </ul>
+                    <p style="font-size: 0.9rem; margin-top: 1rem;"><strong>🎯 Result:</strong> Targeted notifications, reduced mention spam, team awareness</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- TAB 9: PHASE 2-2 ADMIN ROUTES -->
+    <div id="phase-2-2-admin" class="canvas-container">
+        <div class="card">
+            <span class="card-label admin">Admin Dashboard Update</span>
+            <h3>📊 Updated Admin Routes Map (Phase 2-2)</h3>
+            <div style="margin: 1.5rem 0; padding: 1rem; background: #f9f9f9; border: 1px solid #ddd; border-radius: 4px; font-family: monospace; font-size: 0.85rem; line-height: 1.8;">
+                <div style="margin-bottom: 1rem;">
+                    <strong>/bot</strong>
+                    <div style="margin-left: 2rem;">
+                        <div>├── /login <span style="color: #666;">[Kitsu 認証]</span></div>
+                        <div>├── /setup <span style="color: #666;">[初期セットアップ]</span></div>
+                        <div>├── /admin <span style="color: #666;">[📊 管理画面トップ]</span></div>
+                        <div style="margin-left: 2rem;">
+                            <div>├── /admin/users <span style="color: #999;">👥 ユーザーマップ (既存)</span></div>
+                            <div>├── /admin/checkers <span style="color: #999;">✅ チェッカー設定 (既存)</span></div>
+                            <div>├── /admin/drive <span style="color: #999;">📁 Google Drive設定 (既存)</span></div>
+                            <div>├── /admin/bot <span style="color: #999;">🤖 Bot設定 (既存)</span></div>
+                            <div>├── /admin/project-channels <span style="color: #999;">🔗 チャンネル管理 (既存)</span></div>
+                            <div>├── /admin/dcc-tools <span style="color: #0066cc;">🎬 DCC ツール設定 ✨ NEW</span></div>
+                            <div>├── /admin/path-mapping <span style="color: #0066cc;">📂 パスマッピング ✨ NEW</span></div>
+                            <div>├── /admin/mention-rules <span style="color: #0066cc;">🔔 ロールメンション ✨ NEW</span></div>
+                            <div>├── /admin/webhooks <span style="color: #ff6600;">🔗 Webhook 管理 🔄 UPDATE</span></div>
+                            <div>└── /admin/audit <span style="color: #0066cc;">📋 監査ログ ✨ NEW</span></div>
+                        </div>
+                        <div>└── /logout <span style="color: #666;">[ログアウト]</span></div>
+                    </div>
+                </div>
+                <div style="margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid #ddd;">
+                    <strong>凡例:</strong>
+                    <div style="margin-top: 0.5rem;">
+                        <span style="display: inline-block; padding: 0.25rem 0.5rem; background: #0066cc; color: white; border-radius: 3px; margin-right: 0.5rem; font-size: 0.8rem;">✨ NEW</span> = 新規追加
+                    </div>
+                    <div>
+                        <span style="display: inline-block; padding: 0.25rem 0.5rem; background: #ff6600; color: white; border-radius: 3px; margin-right: 0.5rem; font-size: 0.8rem;">🔄 UPDATE</span> = 更新・拡張
+                    </div>
+                    <div>
+                        <span style="display: inline-block; padding: 0.25rem 0.5rem; background: #999; color: white; border-radius: 3px; margin-right: 0.5rem; font-size: 0.8rem;">既存</span> = 既に実装済み
+                    </div>
+                </div>
+            </div>
+
+            <h3 style="margin-top: 2rem;">新規ページの役割</h3>
+            <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 1rem; margin-top: 1rem;">
+                <div style="padding: 1rem; background: #e3f2fd; border-radius: 4px;">
+                    <strong>🎬 /admin/dcc-tools</strong>
+                    <p style="font-size: 0.85rem; margin-top: 0.5rem;">DCC ツール（Maya・Nuke等）の設定管理。ファイルパターン、対応エンティティ型、タスク型フィルタを設定。</p>
+                </div>
+                <div style="padding: 1rem; background: #f3e5f5; border-radius: 4px;">
+                    <strong>📂 /admin/path-mapping</strong>
+                    <p style="font-size: 0.85rem; margin-top: 0.5rem;">環境別パスマッピング設定。サーバーパス（/mnt/projects）をローカルパス（C:\projects等）に自動変換。</p>
+                </div>
+                <div style="padding: 1rem; background: #fff3e0; border-radius: 4px;">
+                    <strong>🔔 /admin/mention-rules</strong>
+                    <p style="font-size: 0.85rem; margin-top: 0.5rem;">Discord ロールメンション ルール設定。タスク型×ステータス→ロール ID マッピング。</p>
+                </div>
+                <div style="padding: 1rem; background: #e8f5e9; border-radius: 4px;">
+                    <strong>📋 /admin/audit</strong>
+                    <p style="font-size: 0.85rem; margin-top: 0.5rem;">送信履歴ログ表示。全Discord通知の送受信結果、リトライ回数、エラー内容を可視化。</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- TAB 10: DATABASE SCHEMA -->
+    <div id="phase-2-2-schema" class="canvas-container">
+        <div class="card">
+            <span class="card-label diagram">Schema Update</span>
+            <h3>🗄️ Database Schema — Phase 2-2 New Tables</h3>
+            <div style="margin: 1.5rem 0; padding: 1rem; background: #f9f9f9; border-radius: 4px; font-family: monospace; font-size: 0.8rem; line-height: 1.8; overflow-x: auto;">
+                <div style="margin-bottom: 1.5rem;">
+                    <strong style="color: #0066cc;">📋 TABLE: ProjectDCCTool (新規 Phase 2-2-1)</strong>
+                    <div style="margin-left: 1rem; background: white; padding: 0.75rem; border-radius: 2px; margin-top: 0.5rem;">
+                        <div>id: INT PRIMARY KEY</div>
+                        <div>kitsu_project_id: STRING (FK → Project)</div>
+                        <div>dcc_type: STRING ('maya', 'nuke', 'blender',...)</div>
+                        <div>file_path_pattern: STRING ('/productions/{project}/{entity}.nk')</div>
+                        <div>entity_type_filter: STRING ('shot', 'asset', 'sequence', or '')</div>
+                        <div>task_type_filter: STRING (optional, e.g. 'Compositing')</div>
+                        <div>enabled: BOOL</div>
+                    </div>
+                </div>
+
+                <div style="margin-bottom: 1.5rem;">
+                    <strong style="color: #0066cc;">📂 TABLE: PathMapping (新規 Phase 2-2-1)</strong>
+                    <div style="margin-left: 1rem; background: white; padding: 0.75rem; border-radius: 2px; margin-top: 0.5rem;">
+                        <div>id: INT PRIMARY KEY</div>
+                        <div>kitsu_project_id: STRING (FK → Project)</div>
+                        <div>source_path: STRING ('/mnt/projects/proj_001')</div>
+                        <div>windows_path: STRING ('C:\projects\proj_001')</div>
+                        <div>macos_path: STRING ('/Volumes/projects/proj_001')</div>
+                        <div>enabled: BOOL</div>
+                    </div>
+                </div>
+
+                <div style="margin-bottom: 1.5rem;">
+                    <strong style="color: #0066cc;">📋 TABLE: AuditLog (新規 Phase 2-2-3)</strong>
+                    <div style="margin-left: 1rem; background: white; padding: 0.75rem; border-radius: 2px; margin-top: 0.5rem;">
+                        <div>id: INT PRIMARY KEY</div>
+                        <div>kitsu_project_id: STRING</div>
+                        <div>task_id: STRING (Kitsu Task ID)</div>
+                        <div>webhook_url: STRING (destination)</div>
+                        <div>success: BOOL (send成功/失敗)</div>
+                        <div>retry_count: INT (リトライ回数)</div>
+                        <div>error_message: STRING (エラー詳細)</div>
+                        <div>discord_message_id: STRING (送信済みメッセージ ID)</div>
+                        <div>created_at: TIMESTAMP (自動削除: 30日超過)</div>
+                    </div>
+                </div>
+
+                <div style="margin-bottom: 1.5rem;">
+                    <strong style="color: #0066cc;">🔔 TABLE: MentionRule (新規 Phase 2-2-4)</strong>
+                    <div style="margin-left: 1rem; background: white; padding: 0.75rem; border-radius: 2px; margin-top: 0.5rem;">
+                        <div>id: INT PRIMARY KEY</div>
+                        <div>kitsu_project_id: STRING (FK → Project)</div>
+                        <div>task_type: STRING ('' = all, 'Compositing', 'Animation',...)</div>
+                        <div>task_status: STRING ('' = all, 'WFA', 'READY', 'DONE',...)</div>
+                        <div>discord_role_id: STRING (@role to mention)</div>
+                        <div>enabled: BOOL</div>
+                    </div>
+                </div>
+
+                <div style="margin-bottom: 1.5rem;">
+                    <strong style="color: #ff6600;">👥 TABLE: UserMap (更新 Phase 2-2-P0)</strong>
+                    <div style="margin-left: 1rem; background: #fff3e0; padding: 0.75rem; border-radius: 2px; margin-top: 0.5rem;">
+                        <div>id: INT PRIMARY KEY</div>
+                        <div>kitsu_project_id: STRING (FK → Project)</div>
+                        <div>kitsu_username: STRING (可変：改名可能)</div>
+                        <div style="color: #0066cc;"><strong>✨ kitsu_email: STRING (Immutable!)</strong></div>
+                        <div>discord_id: STRING</div>
+                        <div style="font-size: 0.75rem; color: #666; margin-top: 0.5rem;">※ Email がユーザー改名後も有効な ID として機能</div>
+                    </div>
+                </div>
+
+                <div>
+                    <strong style="color: #ff6600;">🔗 TABLE: ProjectWebhook (更新 Phase 2-2-P0)</strong>
+                    <div style="margin-left: 1rem; background: #fff3e0; padding: 0.75rem; border-radius: 2px; margin-top: 0.5rem;">
+                        <div>id: INT PRIMARY KEY</div>
+                        <div>kitsu_project_id: STRING (FK → Project, UNIQUE)</div>
+                        <div style="color: #999; text-decoration: line-through;">task_type: STRING ❌ 削除</div>
+                        <div style="color: #999; text-decoration: line-through;">entity_type: STRING ❌ 削除</div>
+                        <div>webhook_url: STRING (プロジェクト全体で単一 URL)</div>
+                        <div>discord_channel_id: STRING (参照用)</div>
+                        <div style="font-size: 0.75rem; color: #666; margin-top: 0.5rem;">※ 1プロジェクト = 1 Webhook に統一</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- TAB 11: WEBHOOK FLOW -->
+    <div id="phase-2-2-webhook" class="canvas-container">
+        <div class="card">
+            <span class="card-label message">Message Flow</span>
+            <h3>🔄 Webhook Processing Flow — Phase 2-2 Enhanced</h3>
+            <div style="margin: 1.5rem 0; padding: 1rem; background: #f0f0f0; border-radius: 4px; font-family: monospace; font-size: 0.85rem; line-height: 2.2;">
+                <div style="margin-bottom: 0.5rem;"><strong>1️⃣ Kitsu Webhook 受信</strong> → /bot/webhook エンドポイント</div>
+                <div style="margin-left: 2rem; margin-bottom: 0.5rem; color: #666;">POST /bot/webhook (Task更新通知)</div>
+                <div style="margin-bottom: 1rem;">↓</div>
+
+                <div style="margin-bottom: 0.5rem;"><strong>2️⃣ Task データ抽出 + 認証確認</strong></div>
+                <div style="margin-left: 2rem; margin-bottom: 0.5rem; color: #666;">JWT Token 取得（セッションストア優先）</div>
+                <div style="margin-bottom: 1rem;">↓</div>
+
+                <div style="margin-bottom: 0.5rem;"><strong>3️⃣ Status フィルタリング</strong></div>
+                <div style="margin-left: 2rem; margin-bottom: 0.5rem; color: #666;">WFA, READY, DONE 等の重要ステータスのみ処理</div>
+                <div style="margin-bottom: 1rem;">↓</div>
+
+                <div style="margin-bottom: 0.5rem;"><strong>4️⃣ Discord メッセージ組立</strong></div>
+                <div style="margin-left: 2rem; margin-bottom: 0.25rem; color: #666;"><strong>┌─ Base Embed</strong> (既存・必須)</div>
+                <div style="margin-left: 2.5rem; margin-bottom: 0.25rem; color: #666;">├─ プロジェクト名・Entity・Task型・Status</div>
+                <div style="margin-left: 2.5rem; margin-bottom: 0.25rem; color: #666;">├─ Status メッセージ + 絵文字</div>
+                <div style="margin-left: 2.5rem; margin-bottom: 0.25rem; color: #666;">└─ Color: Shot🔵 / Asset🟢 / Sequence🔷</div>
+                <div style="margin-left: 2rem; margin-bottom: 0.25rem; color: #0066cc;"><strong>┌─ DCC Action Row ✨ NEW (Phase 2-2-1)</strong></div>
+                <div style="margin-left: 2.5rem; margin-bottom: 0.25rem; color: #0066cc;">├─ [🔴 Open in Nuke] [🟢 Open in Maya] 等</div>
+                <div style="margin-left: 2.5rem; margin-bottom: 0.25rem; color: #0066cc;">└─ vfx-launcher:// URL + パスマッピング適用</div>
+                <div style="margin-left: 2rem; margin-bottom: 0.25rem; color: #0066cc;"><strong>┌─ @Mention 組立 ✨ NEW (Phase 2-2-4)</strong></div>
+                <div style="margin-left: 2.5rem; margin-bottom: 0.25rem; color: #0066cc;">├─ 既存: チェッカーメンション</div>
+                <div style="margin-left: 2.5rem; margin-bottom: 0.25rem; color: #0066cc;">├─ 既存: アーティストメンション</div>
+                <div style="margin-left: 2.5rem; margin-bottom: 0.25rem; color: #0066cc;">└─ ✨ 新規: MentionRule ロール自動メンション</div>
+                <div style="margin-left: 2rem; margin-bottom: 1rem; color: #666;"><strong>└─ Meta 情報</strong> (GoogleDrive URL, DCC情報等)</div>
+                <div style="margin-bottom: 1rem;">↓</div>
+
+                <div style="margin-bottom: 0.5rem;"><strong>5️⃣ Webhook 送信（リトライロジック ✨ NEW Phase 2-2-2）</strong></div>
+                <div style="margin-left: 2rem; margin-bottom: 0.25rem; color: #666;">初回送信試行</div>
+                <div style="margin-left: 2rem; margin-bottom: 0.25rem; color: #666;">├─ ✅ 2xx → 成功・ログ記録</div>
+                <div style="margin-left: 2rem; margin-bottom: 0.25rem; color: #ff6600;">├─ 429 → Retry-After 待機 + 指数バックオフリトライ</div>
+                <div style="margin-left: 2rem; margin-bottom: 0.25rem; color: #ff6600;">├─ 5xx → 指数バックオフ (1s→2s→4s) 最大3回</div>
+                <div style="margin-left: 2rem; margin-bottom: 1rem; color: #ff6600;">└─ 4xx → リトライなし・即失敗</div>
+                <div style="margin-bottom: 1rem;">↓</div>
+
+                <div style="margin-bottom: 0.5rem;"><strong>6️⃣ 監査ログ記録 ✨ NEW (Phase 2-2-3)</strong></div>
+                <div style="margin-left: 2rem; margin-bottom: 0.25rem; color: #666;">AuditLog テーブルに記録</div>
+                <div style="margin-left: 2rem; margin-bottom: 0.25rem; color: #666;">├─ task_id, success/failure, retry_count</div>
+                <div style="margin-left: 2rem; margin-bottom: 0.25rem; color: #666;">├─ error_message (失敗時の詳細)</div>
+                <div style="margin-left: 2rem; margin-bottom: 1rem; color: #666;">└─ discord_message_id (送信済みメッセージ参照)</div>
+                <div style="margin-bottom: 1rem;">↓</div>
+
+                <div style="margin-bottom: 0.5rem;"><strong>✅ 完了</strong> → アーティストが Discord で通知受け取り</div>
+                <div style="margin-left: 2rem; margin-bottom: 0.5rem; color: #666;">DCC ボタンクリック → ローカルランチャー起動 → DCC+ファイルオープン</div>
+            </div>
+        </div>
+    </div>
+
+    <footer>
+        <p>Kitsu-Discord Pipeline v2.2 — DCC Integration & Monitoring | Updated May 11, 2026</p>
+        <p style="font-size: 0.8rem; margin-top: 0.5rem;">Phase 2-2 complete: DCC tool direct links, error retry mechanisms, audit logging, role-based @mentions, and more</p>
+    </footer>
+
+    <script>
+        function showTab(tabName) {
+            // Hide all containers
+            const containers = document.querySelectorAll('.canvas-container');
+            containers.forEach(c => c.classList.remove('active'));
+
+            // Show selected container
+            document.getElementById(tabName).classList.add('active');
+
+            // Update buttons
+            const buttons = document.querySelectorAll('.tab-btn');
+            buttons.forEach(b => b.classList.remove('active'));
+            event.target.classList.add('active');
+        }
+    </script>
+</body>
+</html>
