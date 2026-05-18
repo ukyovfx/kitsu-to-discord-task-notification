@@ -8,13 +8,13 @@
 # Test binary, built with `go test -c`
 *.test
 
-# Output of the go coverage tool, specifically when used with LiteIDE
+# Output of the go coverage tool
 *.out
 
-# Dependency directories (remove the comment below to include it)
+# Dependency directories
 # vendor/
 
-# VisualStudioCode
+# Visual Studio Code
 .vscode
 
 # App
@@ -29,17 +29,30 @@ tests.bat
 /logs/*
 *.zip
 
-# Environment / secrets — never commit
+# Environment / secrets - never commit
 .env
 .env.local
 .env.production
+.env.development
 .env.*.local
+.envrc
 
-# Runtime data — never commit
+# Runtime data - never commit
+/data/
 /data/*.db
 /data/sqlite.db
 /data/filebrowser.db
+*.sqlite
+*.sqlite3
+*.db-shm
+*.db-wal
 
-# Deployment sample data — never commit
+# Deployment sample data - never commit
 /deploy/.env
 /deploy/data/
+/deploy/*.env
+
+# Presentation artifacts created during release prep
+/screenshots/*.png
+/screenshots/*.jpg
+/screenshots/*.jpeg

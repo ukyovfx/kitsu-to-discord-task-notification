@@ -1,0 +1,17 @@
+# Replace @maintainers with the real GitHub user or team before publishing.
+# Default owner
+* @maintainers
+
+# Security-sensitive paths
+/.env.example @maintainers
+/conf.toml.example @maintainers
+/docker-compose.yml @maintainers
+/SECURITY.md @maintainers
+/src/setup/ @maintainers
+/src/main.go @maintainers
+
+# GitHub repository operations
+/.github/ @maintainers
+/README.md @maintainers
+/CONTRIBUTING.md @maintainers
+/CHANGELOG.md @maintainers

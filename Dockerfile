@@ -6,7 +6,7 @@ COPY . .
 RUN CGO_ENABLED=1 go build -o kitsu-discord ./src
 
 FROM debian:bookworm-slim
-RUN apt-get update && apt-get install -y ca-certificates tzdata && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y ca-certificates curl tzdata && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY --from=builder /app/kitsu-discord .
 CMD ["./kitsu-discord"]

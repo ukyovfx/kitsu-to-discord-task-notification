@@ -64,6 +64,20 @@ This release focuses on **single-project setups** with **notification routing an
 
 Most of these are roadmap items for v0.2.0. For production use, see `docs/SETUP_FOR_STUDIOS.md` and verify routing against your expected notification volume.
 
+## Roadmap
+
+The following items are intentionally **out of v0.1.0 scope** and are tracked for **v0.2.0+** rather than being partially shipped now:
+
+- Project-scoped multi-project admin management
+- Admin audit surface in the browser (`/bot/admin/audit`)
+- Safer delete-and-recreate handling for existing Discord channel layouts
+- Direct Kitsu task deep links in notifications
+- UI controls for `@here` routing and broader mention policies
+- More explicit setup dry-run and confirmation workflows
+- Screenshot asset completion for public marketing/release pages
+
+If you need these capabilities, keep them in roadmap planning instead of extending the v0.1.0 release branch.
+
 ## UI Surfaces
 
 - `/bot/login` — admin sign-in
@@ -325,6 +339,7 @@ location ~ ^/api/pictures/thumbnails/preview-files/ {
 - Dev vs production environment setup: `docs/ENVIRONMENTS.md`
 - First-time studio setup walkthrough: `docs/SETUP_FOR_STUDIOS.md`
 - Error messages and diagnostics: `docs/TROUBLESHOOTING.md`
+- Repo-local release notes and scope sync: `docs/notes/`
 
 ## Contributing and Security
 

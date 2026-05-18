@@ -1,0 +1,94 @@
+window.Routing = () => (
+    <section className="doc" id="routing">
+        <div className="kicker">Message Routing</div>
+        <h1 className="docnum"><span className="n">05</span>Message Routing</h1>
+        <h2 className="docsub">?????????????????? Discord ??????</h2>
+        <p className="doc-intro">
+            ?????????? <code>ProjectWebhook</code> ? routing ??????????? Discord ????????????Embed ?????????????????? status color ??????????
+        </p>
+
+        <div className="variant-label">
+            <span className="v">Routing Logic</span>
+            <h3>??????????</h3>
+        </div>
+        <div className="wf wf-pad box">
+            <ol style={{margin:0,paddingLeft:'20px',fontSize:'12px',lineHeight:'1.9'}}>
+                <li><strong>???</strong>: <code>task_type</code> ? <code>entity_type</code> ?????????????</li>
+                <li><strong>????????</strong>: <code>entity_type</code> ?????????????????????</li>
+                <li><strong>???????</strong>: <code>task_type == "*"</code> ????????????????</li>
+                <li><strong>?????</strong>: ?????????????????????</li>
+            </ol>
+        </div>
+
+        <div className="variant-label">
+            <span className="v">Entity Types</span>
+            <h3>Kitsu ?????????</h3>
+        </div>
+        <div className="wf box">
+            <table className="adm">
+                <thead>
+                    <tr><th>?????????</th><th>?</th><th>??</th></tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><span className="pill">Shot</span></td>
+                        <td>SH0010, SH0020...</td>
+                        <td>?????????????</td>
+                    </tr>
+                    <tr>
+                        <td><span className="pill">Asset</span></td>
+                        <td>CHR_Hero, BG_Forest...</td>
+                        <td>???????????????</td>
+                    </tr>
+                    <tr>
+                        <td><span className="pill">Sequence</span></td>
+                        <td>SQ010, SQ020...</td>
+                        <td>?????????????</td>
+                    </tr>
+                    <tr>
+                        <td><span className="pill">Episode</span></td>
+                        <td>EP01, EP02...</td>
+                        <td>TV?????????</td>
+                    </tr>
+                </tbody>
+            </table>
+            <div className="note" style={{position:'relative',transform:'none',marginTop:'12px',maxWidth:'none'}}>
+                Discord Embed ??? status color ??????????
+            </div>
+        </div>
+
+        <div className="variant-label">
+            <span className="v">Task Types</span>
+            <h3>??????????</h3>
+        </div>
+        <div className="wf box">
+            <table className="adm">
+                <thead>
+                    <tr><th>??????</th><th>????</th><th>??</th></tr>
+                </thead>
+                <tbody>
+                    <tr><td>Animation</td><td>???</td><td>???????</td></tr>
+                    <tr><td>FX</td><td>??</td><td>?????</td></tr>
+                    <tr><td>Lighting</td><td>??</td><td>??????</td></tr>
+                    <tr><td>Rendering</td><td>???</td><td>??????</td></tr>
+                    <tr><td>Compositing</td><td>?</td><td>??????</td></tr>
+                    <tr><td>Color Grading</td><td>??</td><td>??????????</td></tr>
+                    <tr><td>Modeling</td><td>??</td><td>?????</td></tr>
+                    <tr><td>Texturing</td><td>???</td><td>????????</td></tr>
+                    <tr><td>Shading</td><td>??</td><td>???????</td></tr>
+                    <tr><td>Rigging</td><td>??</td><td>????</td></tr>
+                    <tr><td>Lookdev</td><td>???</td><td>?????</td></tr>
+                    <tr><td>Storyboard</td><td>???</td><td>????</td></tr>
+                    <tr><td>Background / Env</td><td>???</td><td>?????</td></tr>
+                    <tr><td>Layout</td><td>??</td><td>?????</td></tr>
+                    <tr><td>Editing / Edit</td><td>??</td><td>??</td></tr>
+                    <tr><td>Sound / Audio</td><td>??</td><td>??</td></tr>
+                    <tr><td>Concept</td><td>??</td><td>?????</td></tr>
+                    <tr><td>Script</td><td>??</td><td>??</td></tr>
+                    <tr><td>Design</td><td>??</td><td>????</td></tr>
+                    <tr><td>Default</td><td>??</td><td>??????????????</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </section>
+);

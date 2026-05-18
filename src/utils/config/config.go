@@ -43,6 +43,11 @@ type MentionConfig struct {
 	Checkers        []CheckerEntry `toml:"checkers"`        // タスクタイプ → チェッカー Discord ID
 }
 
+// NotificationConfig は通知機能の設定
+type NotificationConfig struct {
+	NotifyOnAssign bool `toml:"notifyOnAssign"` // true なら TODO（新規アサイン）ステータスの変化も通知する
+}
+
 type Config struct {
 	TplPreset             string
 	IgnoreMessagesDaysOld int
@@ -61,12 +66,15 @@ type Config struct {
 		EmbedsPerRequests int
 		RequestsPerMinute int
 		WebhookURL        string
-		UseThreads        bool               `toml:"useThreads"`       // true でタスクごとにスレッドを作成
-		Productions       []Productions      `toml:"productions,omitempty"`
-		TaskTypeWebhooks  []TaskTypeWebhook  `toml:"taskTypeWebhooks,omitempty"` // 工程別 Webhook
+		UseThreads        bool              `toml:"useThreads"`
+		BotToken          string            `toml:"botToken"`  // Discord Bot トークン（${DISCORD_BOT_TOKEN}）
+		GuildID           string            `toml:"guildID"`   // Discord サーバー ID
+		Productions       []Productions     `toml:"productions,omitempty"`
+		TaskTypeWebhooks  []TaskTypeWebhook `toml:"taskTypeWebhooks,omitempty"`
 	}
-	Mention     MentionConfig `toml:"mention"`
-	GoogleDrive struct {
+	Mention      MentionConfig       `toml:"mention"`
+	Notification NotificationConfig `toml:"notification"`
+	GoogleDrive  struct {
 		URL string `toml:"url"`
 	} `toml:"googleDrive"`
 }

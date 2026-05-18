@@ -1,0 +1,83 @@
+name: Bug report
+description: Report a reproducible problem in runtime, setup, routing, or operator flow.
+title: "[Bug] "
+labels: ["bug", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. Please include enough detail for a maintainer to reproduce the problem safely.
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What happened, and what did you expect instead?
+      placeholder: Setup showed success, but one Discord channel was missing.
+    validations:
+      required: true
+  - type: dropdown
+    id: deployment
+    attributes:
+      label: Deployment style
+      options:
+        - Docker Compose on one host
+        - Docker Compose behind reverse proxy
+        - Local debug environment
+        - Other
+    validations:
+      required: true
+  - type: dropdown
+    id: proxy
+    attributes:
+      label: Reverse proxy usage
+      options:
+        - No reverse proxy
+        - nginx
+        - Cloudflare Tunnel / proxy
+        - Other reverse proxy
+    validations:
+      required: true
+  - type: dropdown
+    id: filebrowser
+    attributes:
+      label: Was the debug FileBrowser profile enabled?
+      options:
+        - "No"
+        - "Yes"
+        - Not sure
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Reproduction steps
+      description: List the exact steps to reproduce the issue.
+      placeholder: |
+        1. Start with docker compose up -d --build
+        2. Open /bot/setup
+        3. Create a new project
+        4. Observe...
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs
+      description: Paste docker compose logs --tail=200 app with secrets removed.
+      render: shell
+    validations:
+      required: true
+  - type: textarea
+    id: config
+    attributes:
+      label: Relevant config notes
+      description: Mention route settings, task type webhooks, runtime env assumptions, or anything unusual.
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I removed secrets such as webhook URLs, passwords, and tokens.
+          required: true
+        - label: I checked README.md and troubleshooting first.
+          required: true

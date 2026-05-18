@@ -1,0 +1,735 @@
+package setup
+
+import (
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"os"
+	"strings"
+	"time"
+
+	"app/src/api/kitsu"
+	"app/src/model"
+	"app/src/utils/basicauth"
+	"gorm.io/gorm"
+)
+
+// --- Response types for /api/setup/* ---
+
+// SetupStatusResponse is the response body for GET /api/setup/status.
+type SetupStatusResponse struct {
+	Kitsu         KitsuStatusInfo   `json:"kitsu"`
+	Discord       DiscordStatusInfo `json:"discord"`
+	Poller        PollerStatusInfo  `json:"poller"`
+	Project       ProjectStatusInfo `json:"project"`
+	SetupComplete bool              `json:"setup_complete"`
+	SetupWarnings []string          `json:"setup_warnings"`
+}
+
+// KitsuStatusInfo holds the current Kitsu connectivity and auth state.
+type KitsuStatusInfo struct {
+	Configured    bool    `json:"configured"`
+	Reachable     bool    `json:"reachable"`
+	Authenticated bool    `json:"authenticated"`
+	Error         *string `json:"error"`
+}
+
+// DiscordStatusInfo holds the current Discord bot and guild state.
+type DiscordStatusInfo struct {
+	Configured  bool                  `json:"configured"`
+	BotValid    bool                  `json:"bot_valid"`
+	BotName     string                `json:"bot_name,omitempty"`
+	GuildValid  bool                  `json:"guild_valid"`
+	GuildName   string                `json:"guild_name,omitempty"`
+	Permissions DiscordPermissionInfo `json:"permissions"`
+	Error       *string               `json:"error"`
+}
+
+// DiscordPermissionInfo reports which critical bot permissions are confirmed.
+type DiscordPermissionInfo struct {
+	ManageChannels bool `json:"manage_channels"`
+	ManageWebhooks bool `json:"manage_webhooks"`
+}
+
+// PollerStatusInfo describes the poller's last known state.
+type PollerStatusInfo struct {
+	Running         bool       `json:"running"`
+	LastPollAt      *time.Time `json:"last_poll_at"`
+	LastTaskCount   int        `json:"last_task_count"`
+	LastError       *string    `json:"last_error"`
+	PollIntervalSec int        `json:"poll_interval_sec"`
+}
+
+// ProjectStatusInfo describes configured project state in the DB.
+type ProjectStatusInfo struct {
+	Selected    bool   `json:"selected"`
+	ProjectID   string `json:"project_id,omitempty"`
+	ProjectName string `json:"project_name,omitempty"`
+	Template    string `json:"template,omitempty"`
+	ChannelCount int   `json:"channel_count"`
+	WebhookCount int   `json:"webhook_count"`
+}
+
+// SetupProjectItem is one entry in the GET /api/setup/projects response.
+type SetupProjectItem struct {
+	ProjectID     string `json:"project_id"`
+	ProjectName   string `json:"project_name"`
+	TaskTypeCount int    `json:"task_type_count"`
+	IsConfigured  bool   `json:"is_configured"`
+}
+
+// ApplyProjectRequest is the request body for POST /api/setup/apply-project.
+type ApplyProjectRequest struct {
+	ProjectID string `json:"project_id"`
+	Template  string `json:"template"`
+	Language  string `json:"language"`
+}
+
+// ApplyProjectResponse is the response body for POST /api/setup/apply-project.
+type ApplyProjectResponse struct {
+	OK           bool     `json:"ok"`
+	ProjectID    string   `json:"project_id"`
+	ProjectName  string   `json:"project_name"`
+	ChannelCount int      `json:"channels_created"`
+	WebhookCount int      `json:"webhooks_created"`
+	SafeToRetry  bool     `json:"safe_to_retry"`
+	Lines        []string `json:"lines"`
+	Error        *string  `json:"error"`
+}
+
+// TestKitsuRequest is the request body for POST /api/setup/test-kitsu.
+type TestKitsuRequest struct {
+	Hostname string `json:"hostname"`
+	Email    string `json:"email"`
+	Password string `json:"password"`
+}
+
+// TestKitsuResponse is the response body for POST /api/setup/test-kitsu.
+type TestKitsuResponse struct {
+	Reachable     bool    `json:"reachable"`
+	Authenticated bool    `json:"authenticated"`
+	Error         *string `json:"error"`
+}
+
+// TestDiscordRequest is the request body for POST /api/setup/test-discord.
+type TestDiscordRequest struct {
+	BotToken string `json:"bot_token"`
+	GuildID  string `json:"guild_id"`
+}
+
+// TestDiscordResponse is the response body for POST /api/setup/test-discord.
+type TestDiscordResponse struct {
+	BotValid    bool                  `json:"bot_valid"`
+	BotName     string                `json:"bot_name,omitempty"`
+	GuildValid  bool                  `json:"guild_valid"`
+	GuildName   string                `json:"guild_name,omitempty"`
+	Permissions DiscordPermissionInfo `json:"permissions"`
+	Error       *string               `json:"error"`
+}
+
+// --- Handlers ---
+
+// SetupStatusHandler handles GET /api/setup/status.
+// Returns a unified JSON snapshot of Kitsu, Discord, Poller, and Project readiness.
+func SetupStatusHandler(db *gorm.DB, pollIntervalSec int, refreshCreds func() (kitsuHost, botToken, guildID, webhookURL string)) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		kitsuHost, botToken, guildID, _ := refreshCreds()
+
+		resp := SetupStatusResponse{
+			Kitsu:   checkKitsuStatus(kitsuHost),
+			Discord: checkDiscordStatus(botToken, guildID),
+			Poller:  buildPollerStatus(pollIntervalSec),
+			Project: buildProjectStatus(db),
+		}
+
+		resp.SetupComplete = resp.Kitsu.Authenticated &&
+			resp.Discord.BotValid &&
+			resp.Discord.GuildValid &&
+			resp.Discord.Permissions.ManageChannels &&
+			resp.Discord.Permissions.ManageWebhooks
+
+		resp.SetupWarnings = []string{}
+		if !resp.Discord.Permissions.ManageChannels {
+			resp.SetupWarnings = append(resp.SetupWarnings, "Discord bot is missing MANAGE_CHANNELS permission")
+		}
+		if !resp.Discord.Permissions.ManageWebhooks {
+			resp.SetupWarnings = append(resp.SetupWarnings, "Discord bot is missing MANAGE_WEBHOOKS permission")
+		}
+
+		json.NewEncoder(w).Encode(resp)
+	}
+}
+
+// ProjectsHandler handles GET /api/setup/projects.
+// Returns all Kitsu projects enriched with task type count and DB configuration state.
+func ProjectsHandler(db *gorm.DB) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+
+		kitsuProjects := kitsu.GetProjects()
+		taskTypeCount := len(kitsu.GetTaskTypes().Each)
+
+		configured := model.ListProjects(db)
+		configuredIDs := make(map[string]bool, len(configured))
+		for _, p := range configured {
+			configuredIDs[p.KitsuProjectID] = true
+		}
+
+		out := make([]SetupProjectItem, 0, len(kitsuProjects.Each))
+		for _, p := range kitsuProjects.Each {
+			out = append(out, SetupProjectItem{
+				ProjectID:     p.ID,
+				ProjectName:   strings.TrimSpace(p.Name),
+				TaskTypeCount: taskTypeCount,
+				IsConfigured:  configuredIDs[p.ID],
+			})
+		}
+
+		json.NewEncoder(w).Encode(out)
+	}
+}
+
+// ApplyProjectHandler handles POST /api/setup/apply-project.
+// Runs the full channel/webhook creation flow for the given Kitsu project.
+func ApplyProjectHandler(db *gorm.DB, refreshCreds func() (kitsuHost, botToken, guildID, webhookURL string)) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+
+		var req ApplyProjectRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			errStr := "invalid request body"
+			json.NewEncoder(w).Encode(ApplyProjectResponse{Error: &errStr})
+			return
+		}
+
+		projectID := strings.TrimSpace(req.ProjectID)
+		if projectID == "" {
+			errStr := "project_id is required"
+			json.NewEncoder(w).Encode(ApplyProjectResponse{Error: &errStr})
+			return
+		}
+
+		template := strings.ToLower(strings.TrimSpace(req.Template))
+		if template == "" {
+			template = "cg"
+		}
+		if _, ok := Templates[template]; !ok {
+			errStr := "unsupported template: " + template
+			json.NewEncoder(w).Encode(ApplyProjectResponse{ProjectID: projectID, Error: &errStr})
+			return
+		}
+
+		language := strings.TrimSpace(req.Language)
+		if language != "en" {
+			language = "ja"
+		}
+
+		// Resolve project name from Kitsu
+		project := kitsu.GetProject(projectID)
+		projectName := strings.TrimSpace(project.Name)
+		if projectName == "" {
+			errStr := "project not found in Kitsu (id: " + projectID + ")"
+			json.NewEncoder(w).Encode(ApplyProjectResponse{ProjectID: projectID, Error: &errStr})
+			return
+		}
+
+		kitsuHost, botToken, guildID, _ := refreshCreds()
+
+		result := RunProjectSetup(projectID, projectName, template, language, kitsuHost, guildID, botToken, db)
+
+		resp := ApplyProjectResponse{
+			OK:          result.OK,
+			ProjectID:   projectID,
+			ProjectName: projectName,
+			SafeToRetry: result.SafeToRetry,
+			Lines:       result.Lines,
+		}
+
+		if result.OK {
+			// Count channels and webhook assignments created
+			webhooks := model.ListProjectWebhooks(db, projectID)
+			seenChannels := make(map[string]bool)
+			webhookCount := 0
+			for _, wh := range webhooks {
+				if wh.TaskType != "" {
+					webhookCount++
+				}
+				seenChannels[wh.ChannelName] = true
+			}
+			resp.ChannelCount = len(seenChannels)
+			resp.WebhookCount = webhookCount
+		} else {
+			errStr := "project setup failed — see lines for details"
+			for _, line := range result.Lines {
+				if strings.HasPrefix(line, "FAIL:") {
+					errStr = strings.TrimPrefix(line, "FAIL: ")
+					break
+				}
+			}
+			resp.Error = &errStr
+		}
+
+		json.NewEncoder(w).Encode(resp)
+	}
+}
+
+// TestKitsuHandler handles POST /api/setup/test-kitsu.
+// Verifies connectivity and authentication against a provided Kitsu endpoint.
+func TestKitsuHandler() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+
+		var req TestKitsuRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeTestKitsuError(w, "invalid request body")
+			return
+		}
+
+		hostname := strings.TrimSpace(req.Hostname)
+		email := strings.TrimSpace(req.Email)
+		password := req.Password
+
+		if hostname == "" || email == "" || password == "" {
+			writeTestKitsuError(w, "hostname, email, and password are required")
+			return
+		}
+		if !strings.HasPrefix(hostname, "http://") && !strings.HasPrefix(hostname, "https://") {
+			writeTestKitsuError(w, "hostname must start with http:// or https://")
+			return
+		}
+		if !strings.HasSuffix(hostname, "/") {
+			hostname += "/"
+		}
+
+		client := &http.Client{Timeout: 10 * time.Second}
+		pingURL := strings.TrimRight(hostname, "/") + "/api/"
+		resp, err := client.Get(pingURL)
+		if err != nil {
+			writeTestKitsuError(w, "Kitsu server not reachable: "+err.Error())
+			return
+		}
+		resp.Body.Close()
+		if resp.StatusCode >= 500 {
+			writeTestKitsuError(w, fmt.Sprintf("Kitsu server returned HTTP %d", resp.StatusCode))
+			return
+		}
+
+		token := basicauth.AuthForJWTToken(hostname+"api/auth/login", email, password)
+		if token == "" {
+			errStr := "authentication failed — check email and password"
+			json.NewEncoder(w).Encode(TestKitsuResponse{Reachable: true, Error: &errStr})
+			return
+		}
+
+		json.NewEncoder(w).Encode(TestKitsuResponse{Reachable: true, Authenticated: true})
+	}
+}
+
+// TestDiscordHandler handles POST /api/setup/test-discord.
+// Verifies bot token validity, guild membership, and required permissions.
+func TestDiscordHandler() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+
+		var req TestDiscordRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeTestDiscordError(w, "invalid request body")
+			return
+		}
+
+		botToken := strings.TrimSpace(req.BotToken)
+		guildID := strings.TrimSpace(req.GuildID)
+
+		if botToken == "" || guildID == "" {
+			writeTestDiscordError(w, "bot_token and guild_id are required")
+			return
+		}
+
+		info := checkDiscordStatus(botToken, guildID)
+		json.NewEncoder(w).Encode(TestDiscordResponse{
+			BotValid:    info.BotValid,
+			BotName:     info.BotName,
+			GuildValid:  info.GuildValid,
+			GuildName:   info.GuildName,
+			Permissions: info.Permissions,
+			Error:       info.Error,
+		})
+	}
+}
+
+// --- Internal helpers ---
+
+func checkKitsuStatus(kitsuHost string) KitsuStatusInfo {
+	if kitsuHost == "" {
+		errStr := "KITSU_HOSTNAME not configured"
+		return KitsuStatusInfo{Error: &errStr}
+	}
+	info := KitsuStatusInfo{Configured: true}
+
+	client := &http.Client{Timeout: 8 * time.Second}
+	pingURL := strings.TrimRight(kitsuHost, "/") + "/api/"
+	resp, err := client.Get(pingURL)
+	if err != nil {
+		errStr := "server not reachable: " + err.Error()
+		info.Error = &errStr
+		return info
+	}
+	resp.Body.Close()
+	if resp.StatusCode >= 500 {
+		errStr := fmt.Sprintf("server returned HTTP %d", resp.StatusCode)
+		info.Error = &errStr
+		return info
+	}
+	info.Reachable = true
+
+	jwtToken := os.Getenv("KitsuJWTToken")
+	if jwtToken == "" {
+		errStr := "no active Kitsu session token — check startup logs"
+		info.Error = &errStr
+		return info
+	}
+
+	authURL := strings.TrimRight(kitsuHost, "/") + "/api/auth/user"
+	req, err := http.NewRequest("GET", authURL, nil)
+	if err != nil {
+		errStr := "could not build auth check request"
+		info.Error = &errStr
+		return info
+	}
+	req.Header.Set("Authorization", "Bearer "+jwtToken)
+	authResp, err := client.Do(req)
+	if err != nil {
+		errStr := "auth check failed: " + err.Error()
+		info.Error = &errStr
+		return info
+	}
+	authResp.Body.Close()
+	if authResp.StatusCode == 200 {
+		info.Authenticated = true
+	} else {
+		errStr := fmt.Sprintf("session token rejected (HTTP %d)", authResp.StatusCode)
+		info.Error = &errStr
+	}
+	return info
+}
+
+func checkDiscordStatus(botToken, guildID string) DiscordStatusInfo {
+	if botToken == "" {
+		errStr := "DISCORD_BOT_TOKEN not configured"
+		return DiscordStatusInfo{Error: &errStr}
+	}
+	if guildID == "" {
+		errStr := "DISCORD_GUILD_ID not configured"
+		return DiscordStatusInfo{Configured: true, Error: &errStr}
+	}
+	info := DiscordStatusInfo{Configured: true}
+
+	var botUserID string
+	body, status, err := botDo("GET", discordAPI+"/users/@me", nil, botToken)
+	if err != nil {
+		errStr := "Discord API unreachable: " + err.Error()
+		info.Error = &errStr
+		return info
+	}
+	switch status {
+	case 200:
+		var me struct {
+			ID       string `json:"id"`
+			Username string `json:"username"`
+		}
+		if json.Unmarshal(body, &me) == nil {
+			botUserID = me.ID
+			info.BotName = me.Username
+		}
+		info.BotValid = true
+	case 401:
+		errStr := "bot token invalid (HTTP 401)"
+		info.Error = &errStr
+		return info
+	default:
+		errStr := fmt.Sprintf("unexpected Discord API response (HTTP %d)", status)
+		info.Error = &errStr
+		return info
+	}
+
+	body, status, err = botDo("GET", discordAPI+"/guilds/"+guildID, nil, botToken)
+	if err == nil && status == 200 {
+		var guild struct {
+			Name string `json:"name"`
+		}
+		if json.Unmarshal(body, &guild) == nil {
+			info.GuildName = guild.Name
+		}
+		info.GuildValid = true
+	} else if status == 403 || status == 404 {
+		errStr := fmt.Sprintf("guild not accessible (HTTP %d)", status)
+		info.Error = &errStr
+	}
+
+	if botUserID != "" && info.GuildValid {
+		body, status, err = botDo("GET", discordAPI+"/guilds/"+guildID+"/members/"+botUserID, nil, botToken)
+		if err == nil && status == 200 {
+			var member struct {
+				Permissions string `json:"permissions"`
+			}
+			if json.Unmarshal(body, &member) == nil && member.Permissions != "" {
+				var perms uint64
+				fmt.Sscanf(member.Permissions, "%d", &perms)
+				const manageWebhooks = uint64(1 << 29)
+				const manageChannels = uint64(1 << 4)
+				info.Permissions.ManageChannels = perms&manageChannels != 0
+				info.Permissions.ManageWebhooks = perms&manageWebhooks != 0
+			}
+		}
+	}
+
+	return info
+}
+
+func buildPollerStatus(pollIntervalSec int) PollerStatusInfo {
+	snap := Stats.Snapshot()
+	info := PollerStatusInfo{
+		PollIntervalSec: pollIntervalSec,
+		LastTaskCount:   snap.LastPollTaskCount,
+	}
+	if snap.PollCount > 0 {
+		info.Running = true
+		t := snap.LastPollTime
+		info.LastPollAt = &t
+	}
+	if snap.LastPollErr != "" {
+		info.LastError = &snap.LastPollErr
+	}
+	return info
+}
+
+func buildProjectStatus(db *gorm.DB) ProjectStatusInfo {
+	projects := model.ListProjects(db)
+	if len(projects) == 0 {
+		return ProjectStatusInfo{}
+	}
+
+	// Use the first project for identity fields; aggregate counts across all projects.
+	first := projects[0]
+	info := ProjectStatusInfo{
+		Selected:    true,
+		ProjectID:   first.KitsuProjectID,
+		ProjectName: first.Name,
+		Template:    first.ProjectType,
+	}
+
+	allWebhooks := model.ListAllProjectWebhooks(db)
+	seenChannels := make(map[string]bool)
+	webhookCount := 0
+	for _, wh := range allWebhooks {
+		if wh.TaskType != "" {
+			webhookCount++
+		}
+		seenChannels[wh.KitsuProjectID+"/"+wh.ChannelName] = true
+	}
+	info.ChannelCount = len(seenChannels)
+	info.WebhookCount = webhookCount
+
+	return info
+}
+
+func writeTestKitsuError(w http.ResponseWriter, msg string) {
+	json.NewEncoder(w).Encode(TestKitsuResponse{Error: &msg})
+}
+
+func writeTestDiscordError(w http.ResponseWriter, msg string) {
+	json.NewEncoder(w).Encode(TestDiscordResponse{Error: &msg})
+}
+
+// --- Mapping API types ---
+
+// MappingStateResponse is the response body for GET /api/setup/mapping.
+type MappingStateResponse struct {
+	ProjectRowID uint                    `json:"project_row_id"`
+	ProjectID    string                  `json:"project_id"`
+	ProjectName  string                  `json:"project_name"`
+	Persons      []MappingPerson         `json:"persons"`
+	TaskTypes    []string                `json:"task_types"`
+	UserMaps     []MappingUserEntry      `json:"user_maps"`
+	CheckerMaps  []MappingCheckerEntry   `json:"checker_maps"`
+}
+
+// MappingPerson is a Kitsu person with their current Discord mapping status.
+type MappingPerson struct {
+	KitsuName     string `json:"kitsu_name"`
+	KitsuEmail    string `json:"kitsu_email"`
+	DiscordUserID string `json:"discord_user_id"`
+}
+
+// MappingUserEntry is one saved user mapping entry.
+type MappingUserEntry struct {
+	KitsuName     string `json:"kitsu_name"`
+	KitsuEmail    string `json:"kitsu_email"`
+	DiscordUserID string `json:"discord_user_id"`
+}
+
+// MappingCheckerEntry is one saved checker mapping entry.
+type MappingCheckerEntry struct {
+	TaskType      string `json:"task_type"`
+	DiscordUserID string `json:"discord_user_id"`
+}
+
+// SaveUserMappingRequest is the body for POST /api/setup/mapping/users.
+type SaveUserMappingRequest struct {
+	ProjectID string             `json:"project_id"`
+	Mappings  []MappingUserEntry `json:"mappings"`
+}
+
+// SaveCheckerMappingRequest is the body for POST /api/setup/mapping/checkers.
+type SaveCheckerMappingRequest struct {
+	ProjectID string                `json:"project_id"`
+	Mappings  []MappingCheckerEntry `json:"mappings"`
+}
+
+// MappingStateHandler handles GET /api/setup/mapping.
+// Returns current project info, all Kitsu persons, task types from DB, and existing mappings.
+func MappingStateHandler(db *gorm.DB) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+
+		projects := model.ListProjects(db)
+		if len(projects) == 0 {
+			errStr := "no project configured — complete Step 3 first"
+			json.NewEncoder(w).Encode(map[string]string{"error": errStr})
+			return
+		}
+		proj := projects[0]
+
+		// Build person list from Kitsu
+		allPersons := kitsu.GetPersons()
+		persons := make([]MappingPerson, 0, len(allPersons.Each))
+		for _, p := range allPersons.Each {
+			if !p.Active {
+				continue
+			}
+			fullName := strings.TrimSpace(p.FullName)
+			if fullName == "" {
+				fullName = strings.TrimSpace(p.FirstName + " " + p.LastName)
+			}
+			if fullName == "" {
+				continue
+			}
+			persons = append(persons, MappingPerson{
+				KitsuName:  fullName,
+				KitsuEmail: p.Email,
+			})
+		}
+
+		// Collect distinct task types from project webhooks
+		webhooks := model.ListProjectWebhooks(db, proj.KitsuProjectID)
+		seenTypes := make(map[string]bool)
+		taskTypes := make([]string, 0)
+		for _, wh := range webhooks {
+			if wh.TaskType != "" && !seenTypes[wh.TaskType] {
+				seenTypes[wh.TaskType] = true
+				taskTypes = append(taskTypes, wh.TaskType)
+			}
+		}
+
+		// Existing mappings
+		rawUserMaps := model.ListProjectUserMaps(db, proj.ID)
+		userMaps := make([]MappingUserEntry, 0, len(rawUserMaps))
+		for _, m := range rawUserMaps {
+			userMaps = append(userMaps, MappingUserEntry{
+				KitsuName:     m.KitsuName,
+				KitsuEmail:    m.KitsuEmail,
+				DiscordUserID: m.DiscordUserID,
+			})
+		}
+
+		rawCheckers := model.ListProjectCheckerMaps(db, proj.ID)
+		checkerMaps := make([]MappingCheckerEntry, 0, len(rawCheckers))
+		for _, c := range rawCheckers {
+			checkerMaps = append(checkerMaps, MappingCheckerEntry{
+				TaskType:      c.TaskType,
+				DiscordUserID: c.DiscordUserID,
+			})
+		}
+
+		json.NewEncoder(w).Encode(MappingStateResponse{
+			ProjectRowID: proj.ID,
+			ProjectID:    proj.KitsuProjectID,
+			ProjectName:  proj.Name,
+			Persons:      persons,
+			TaskTypes:    taskTypes,
+			UserMaps:     userMaps,
+			CheckerMaps:  checkerMaps,
+		})
+	}
+}
+
+// SaveUserMappingHandler handles POST /api/setup/mapping/users.
+// Upserts project-scoped user → Discord ID mappings; entries with empty discord_user_id are deleted.
+func SaveUserMappingHandler(db *gorm.DB) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+
+		var req SaveUserMappingRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, `{"error":"invalid request body"}`, http.StatusBadRequest)
+			return
+		}
+
+		proj := model.FindProjectByKitsuID(db, strings.TrimSpace(req.ProjectID))
+		if proj == nil {
+			http.Error(w, `{"error":"project not found"}`, http.StatusNotFound)
+			return
+		}
+
+		for _, m := range req.Mappings {
+			name := strings.TrimSpace(m.KitsuName)
+			if name == "" {
+				continue
+			}
+			discordID := strings.TrimSpace(m.DiscordUserID)
+			if discordID == "" {
+				model.DeleteProjectUserMapByName(db, proj.ID, name)
+			} else {
+				model.UpsertProjectUserMap(db, proj.ID, name, strings.TrimSpace(m.KitsuEmail), discordID)
+			}
+		}
+
+		w.WriteHeader(http.StatusNoContent)
+	}
+}
+
+// SaveCheckerMappingHandler handles POST /api/setup/mapping/checkers.
+// Upserts project-scoped task type → checker Discord ID mappings; empty discord_user_id deletes the entry.
+func SaveCheckerMappingHandler(db *gorm.DB) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+
+		var req SaveCheckerMappingRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, `{"error":"invalid request body"}`, http.StatusBadRequest)
+			return
+		}
+
+		proj := model.FindProjectByKitsuID(db, strings.TrimSpace(req.ProjectID))
+		if proj == nil {
+			http.Error(w, `{"error":"project not found"}`, http.StatusNotFound)
+			return
+		}
+
+		for _, m := range req.Mappings {
+			taskType := strings.TrimSpace(m.TaskType)
+			if taskType == "" {
+				continue
+			}
+			discordID := strings.TrimSpace(m.DiscordUserID)
+			if discordID == "" {
+				model.DeleteProjectCheckerMapByTaskType(db, proj.ID, taskType)
+			} else {
+				model.UpsertProjectCheckerMap(db, proj.ID, taskType, discordID)
+			}
+		}
+
+		w.WriteHeader(http.StatusNoContent)
+	}
+}
