@@ -32,8 +32,14 @@ tests.bat
 # Environment / secrets — never commit
 .env
 .env.local
+.env.production
+.env.*.local
 
 # Runtime data — never commit
 /data/*.db
 /data/sqlite.db
 /data/filebrowser.db
+
+# Deployment sample data — never commit
+/deploy/.env
+/deploy/data/
