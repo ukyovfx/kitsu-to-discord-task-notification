@@ -12,7 +12,7 @@ Before you begin, confirm you have:
 - [ ] Kitsu running and reachable from the server (test: `curl http://YOUR_KITSU_HOST/api/`)
 - [ ] Discord server where you are an administrator
 - [ ] Discord **Bot Token** — create one at [discord.com/developers/applications](https://discord.com/developers/applications) (Bot tab → Reset Token)
-- [ ] Discord **Guild ID** — enable Developer Mode in Discord settings, then right-click your server → Copy Server ID
+- [ ] One or more Discord **Guild IDs** — enable Developer Mode in Discord settings, then right-click each target server → Copy Server ID
 - [ ] A dedicated Kitsu **runtime account** (any role ≥ CG Artist) for the bot to poll with — do not reuse a personal account
 
 > **Bot permissions required:** Manage Channels, Manage Webhooks.
@@ -36,7 +36,7 @@ KITSU_RUNTIME_EMAIL=bot@yourstudio.com
 KITSU_RUNTIME_PASSWORD=your-runtime-password
 
 DISCORD_BOT_TOKEN=your-bot-token
-DISCORD_GUILD_ID=your-server-id
+DISCORD_GUILD_ID=optional-fallback-server-id
 ```
 
 Leave `DISCORD_WEBHOOK_URL` empty for now — the wizard sets up routing in the browser.
@@ -77,7 +77,7 @@ If you get a 502 or connection refused, the app is still starting — wait a mom
 
 1. Open `http://YOUR_SERVER:8090/bot/login` in a browser.
 2. Sign in with your **personal** Kitsu manager or admin account.
-3. After login, navigate to `/bot/setup-wizard`.
+3. After login, open `/bot/admin/bot` then `/bot/admin/projects` first.
 
 The wizard walks you through 4 steps:
 
@@ -85,7 +85,7 @@ The wizard walks you through 4 steps:
 |------|-------------|
 | 1. Kitsu | Verifies your Kitsu connection and authentication |
 | 2. Discord | Confirms the bot token, server membership, and permissions |
-| 3. Project | Creates Discord channels and webhooks for one Kitsu project |
+| 3. Project | Creates Discord channels and webhooks for one Kitsu project in its assigned guild |
 | 4. Mapping | (Optional) Maps Kitsu users to Discord IDs for @mentions |
 
 Each step tests the connection live and shows errors inline before you proceed.
@@ -106,6 +106,7 @@ Each step tests the connection live and shows errors inline before you proceed.
 | Task | Where |
 |------|-------|
 | Monitor system health | `/bot/admin` (dashboard) |
+| Assign guild per project | `/bot/admin/projects` |
 | Edit channel routing | `/bot/setup` |
 | Add more user/checker mappings | `/bot/admin/users`, `/bot/admin/checkers` |
 | Set per-project storage links | `/bot/admin/drive` |

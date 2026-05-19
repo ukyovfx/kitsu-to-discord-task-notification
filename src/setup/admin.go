@@ -231,13 +231,14 @@ func AdminIndex(db *gorm.DB) http.HandlerFunc {
 		}
 		links := []navLink{
 			{"\U0001F3AC", "/bot/setup", "\u30d7\u30ed\u30b8\u30a7\u30af\u30c8\u8a2d\u5b9a", "Project Setup"},
+			{"\U0001F5C2", "/bot/admin/projects", "\u30d7\u30ed\u30b8\u30a7\u30af\u30c8\u3068Guild", "Projects & Guilds"},
 			{"\u2764", "/bot/admin/health", "\u30d8\u30eb\u30b9", "Health"},
 			{"\U0001F50D", "/bot/admin/diagnostics", "\u74b0\u5883\u8a3a\u65ad", "Diagnostics"},
 			{"\U0001F464", "/bot/admin/users", "\u30e6\u30fc\u30b6\u30fc\u5272\u308a\u5f53\u3066", "Users"},
 			{"\u2705", "/bot/admin/checkers", "\u30ec\u30d3\u30e5\u30a2\u30fc\u5272\u308a\u5f53\u3066", "Reviewers"},
 			{"\U0001F916", "/bot/admin/bot", "Bot\u8a2d\u5b9a", "Bot Settings"},
 			{"\U0001F4C1", "/bot/admin/drive", "\u30b9\u30c8\u30ec\u30fc\u30b8", "Storage"},
-			{"\U0001F9FE", "/bot/admin/audit", "\u76e3\u67fb\u30ed\u30b0", "Audit Log"},
+			{"\U0001F9FE", "/bot/admin/audit", "\u76e3\u67fb\u30ed\u30b0 (v0.2+)", "Audit Log (v0.2+)"},
 		}
 		var navGrid strings.Builder
 		navGrid.WriteString(`<div class="dashboard-grid">`)
@@ -249,12 +250,70 @@ func AdminIndex(db *gorm.DB) http.HandlerFunc {
 		}
 		navGrid.WriteString(`</div>`)
 
+		initialSetupCard := `<div class="section-card glass"><h3>` + esc(t(lang, "Initial Setup", "Initial Setup")) + `</h3><ol class="hint" style="margin:8px 0 0 18px;line-height:1.6">` +
+			`<li>` + esc(t(lang, "Bot設定で共有Botトークンを登録", "Register shared bot token in Bot Settings")) + `</li>` +
+			`<li>` + esc(t(lang, "Projects & Guilds で production ごとに Guild ID を割り当て", "Assign a Guild ID per production in Projects & Guilds")) + `</li>` +
+			`<li>` + esc(t(lang, "Project Setup でチャンネルとWebhookを作成", "Create channels and webhooks from Project Setup")) + `</li>` +
+			`<li>` + esc(t(lang, "Health/Diagnostics で権限と接続を確認", "Validate permissions and connectivity in Health/Diagnostics")) + `</li>` +
+			`</ol></div>`
+
 		body := `<div class="section-stack">` +
+			initialSetupCard +
 			statusBar + pollerCard + projectsCard + warningsCard +
 			`<div class="section-card glass"><h3>` + esc(t(lang, "\u7ba1\u7406\u30e1\u30cb\u30e5\u30fc", "Management")) + `</h3>` + navGrid.String() + `</div>` +
 			`</div>`
 
 		fmt.Fprint(w, adminPage(lang, t(lang, "\u30c0\u30c3\u30b7\u30e5\u30dc\u30fc\u30c9", "Dashboard"), r, body))
+	}
+}
+
+func AdminProjectsHandler(db *gorm.DB, fallbackGuildID string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		lang := currentLang(r)
+		fallbackGuildID = strings.TrimSpace(fallbackGuildID)
+
+		if r.Method == http.MethodPost {
+			projectID := strings.TrimSpace(r.FormValue("project_id"))
+			guildID := strings.TrimSpace(r.FormValue("guild_id"))
+			if projectID != "" {
+				if err := model.UpdateProjectGuildID(db, projectID, guildID); err == nil {
+					http.Redirect(w, r, withLang("/bot/admin/projects", r)+"&msg=saved", http.StatusSeeOther)
+					return
+				}
+			}
+			http.Redirect(w, r, withLang("/bot/admin/projects", r)+"&msg=error", http.StatusSeeOther)
+			return
+		}
+
+		var blocks strings.Builder
+		for _, p := range model.ListProjects(db) {
+			effectiveGuildID := strings.TrimSpace(p.DiscordGuildID)
+			if effectiveGuildID == "" {
+				effectiveGuildID = fallbackGuildID
+			}
+			blocks.WriteString(fmt.Sprintf(`
+<form method="POST" class="section-card glass">
+  <input type="hidden" name="project_id" value="%s">
+  <div class="page-heading"><div><h3 style="margin:0">%s</h3><p class="hint">%s: <code>%s</code></p></div></div>
+  <div class="form-grid">
+    <div><label>Discord Guild ID</label><input type="text" name="guild_id" value="%s" placeholder="123456789012345678"></div>
+  </div>
+  <div class="button-row"><button type="submit" class="btn">%s</button></div>
+</form>`,
+				esc(p.KitsuProjectID),
+				esc(p.Name),
+				esc(t(lang, "Project ID", "Project ID")),
+				esc(p.KitsuProjectID),
+				esc(effectiveGuildID),
+				esc(t(lang, "保存", "Save")),
+			))
+		}
+		if blocks.Len() == 0 {
+			blocks.WriteString(emptyState("\U0001F5C2", t(lang, "まだプロジェクトがありません", "No projects configured yet."), t(lang, "先に Project Setup を実行してください。", "Run Project Setup first.")))
+		}
+		body := `<div class="section-stack"><div class="section-card glass"><p class="hint">` + esc(t(lang, "1つのBotを複数Guildへ招待し、productionごとに Guild ID を割り当てます。", "Invite one bot to multiple guilds, then assign a guild ID per production.")) + `</p></div>` + blocks.String() + `</div>`
+		fmt.Fprint(w, adminPage(lang, t(lang, "Projects & Guilds", "Projects & Guilds"), r, body))
 	}
 }
 

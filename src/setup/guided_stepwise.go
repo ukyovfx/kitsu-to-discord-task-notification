@@ -154,10 +154,20 @@ func RenderGuidedSetupPageStepwise(db *gorm.DB, refreshCreds func() (kitsuHost, 
     window.setTimeout(function(){ window.location.reload(); }, 500);
   }
 
+  function setSubmitting(btn, loading){
+    if(!btn) return;
+    btn.disabled = loading;
+    btn.style.opacity = loading ? '0.65' : '';
+    if(loading){ btn.dataset.orig = btn.textContent; btn.textContent = '...'; }
+    else if(btn.dataset.orig){ btn.textContent = btn.dataset.orig; }
+  }
+
   var step1Form = document.getElementById('guidedStep1Form');
   if(step1Form){
     step1Form.addEventListener('submit', async function(ev){
       ev.preventDefault();
+      var btn = document.getElementById('step1SubmitBtn');
+      setSubmitting(btn, true);
       var payload = {};
       new FormData(step1Form).forEach(function(value, key){ payload[key] = value; });
       var res = await fetch(%q, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)});
@@ -166,6 +176,7 @@ func RenderGuidedSetupPageStepwise(db *gorm.DB, refreshCreds func() (kitsuHost, 
         setResult('guidedStep1Result', 'ok', %q);
         reloadSoon();
       } else {
+        setSubmitting(btn, false);
         setResult('guidedStep1Result', 'error', esc(data.error || %q));
       }
     });
@@ -175,6 +186,8 @@ func RenderGuidedSetupPageStepwise(db *gorm.DB, refreshCreds func() (kitsuHost, 
   if(step2Form){
     step2Form.addEventListener('submit', async function(ev){
       ev.preventDefault();
+      var btn = document.getElementById('step2SubmitBtn');
+      setSubmitting(btn, true);
       var payload = {};
       new FormData(step2Form).forEach(function(value, key){ payload[key] = value; });
       var res = await fetch(%q, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)});
@@ -183,8 +196,10 @@ func RenderGuidedSetupPageStepwise(db *gorm.DB, refreshCreds func() (kitsuHost, 
         setResult('guidedStep2Result', 'ok', esc((data.bot_name || 'Bot') + ' / ' + (data.guild_name || payload.guild_id)));
         reloadSoon();
       } else if(data.bot_valid && data.guild_valid){
+        setSubmitting(btn, false);
         setResult('guidedStep2Result', 'warn', esc(data.error || %q));
       } else {
+        setSubmitting(btn, false);
         setResult('guidedStep2Result', 'error', esc(data.error || %q));
       }
     });
@@ -433,13 +448,13 @@ func navStepHTMLOptional(lang string, step, current int, summary, title string) 
 
 func navStepHTML(lang string, step, current int, summary, title string) string {
 	class := "guided-nav-item locked"
-	pill := "locked"
+	pill := t(lang, "前のStepを完了", "complete previous step")
 	if step < current {
 		class = "guided-nav-item done"
-		pill = "done"
+		pill = "✓ done"
 	} else if step == current {
 		class = "guided-nav-item active"
-		pill = "active"
+		pill = "▶ " + t(lang, "進行中", "active")
 	}
 	return fmt.Sprintf(`<div class="%s"><div class="guided-nav-title"><strong>%d. %s</strong><span class="guided-pill">%s</span></div><div class="guided-nav-note">%s</div></div>`,
 		class, step, html.EscapeString(title), html.EscapeString(pill), html.EscapeString(summary))
@@ -538,14 +553,19 @@ func renderActiveStepBody(lang string, diag SetupDiagnostics, currentStep int, d
 <section class="guided-step active">
   <div class="guided-head"><div><h3>%s</h3><p class="guided-note">%s</p></div><div class="guided-pill">active</div></div>
   <div style="margin-top:14px">%s</div>
+  <div class="guided-banner warn" style="margin:12px 0">%s</div>
   <div class="guided-actions" style="margin-top:14px">
     <a class="btn-ghost" href="%s">%s</a>
     <a class="btn-ghost" href="%s">%s</a>
   </div>
 </section>`,
 			html.EscapeString(t(lang, "Step 0: システム確認", "Step 0: System Check")),
-			html.EscapeString(t(lang, "セットアップを始める前に、必要な環境変数が揃っているか確認します。.env ファイルを修正して再起動してください。", "Before starting setup, confirm that required environment variables are in place. Edit your .env file and restart.")),
+			html.EscapeString(t(lang, "セットアップを始める前に、必要な環境変数が揃っているか確認します。", "Before starting setup, confirm that required environment variables are in place.")),
 			envErrors.String(),
+			html.EscapeString(t(lang,
+				"修正方法: プロジェクトルートの `.env.local` ファイルを編集し、`docker compose restart` で再起動してください。変更はコンテナ再起動後に反映されます。",
+				"Fix: Edit `.env.local` in the project root, then run `docker compose restart`. Changes take effect after the container restarts.",
+			)),
 			withLang("/bot/admin/diagnostics", r),
 			html.EscapeString(t(lang, "診断ページを開く", "Open Diagnostics")),
 			withLang("/bot/admin/setup", r),
@@ -562,6 +582,11 @@ func renderActiveStepBody(lang string, diag SetupDiagnostics, currentStep int, d
 		if envNotice != "" {
 			envNotice = fmt.Sprintf(`<div class="guided-banner warn">%s</div>`, html.EscapeString(envNotice))
 		}
+		// Build the host note as raw HTML so we can include a link to Bot Settings.
+		step1HostNote := t(lang,
+			`ホスト名を変更する場合は <a href="/bot/admin/bot" style="color:var(--accent-2)">Bot設定</a> で編集してください。`,
+			`To change the hostname, edit it in <a href="/bot/admin/bot" style="color:var(--accent-2)">Bot Settings</a>.`,
+		)
 		return fmt.Sprintf(`
 <section class="guided-step active">
   <div class="guided-head"><div><h3>%s</h3><p class="guided-note">%s</p></div><div class="guided-pill">%s</div></div>
@@ -575,24 +600,33 @@ func renderActiveStepBody(lang string, diag SetupDiagnostics, currentStep int, d
     <div><label>%s</label><input value="%s" readonly></div>
     <div><label>%s</label><input name="email" placeholder="admin@studio.local" autocomplete="email"></div>
     <div><label>%s</label><input name="password" type="password" autocomplete="current-password"></div>
-    <div class="guided-actions"><button class="btn" type="submit">%s</button></div>
+    <div class="guided-actions"><button class="btn" type="submit" id="step1SubmitBtn">%s</button></div>
   </form>
   <div id="guidedStep1Result" class="guided-result hidden"></div>
 </section>`,
 			html.EscapeString(t(lang, "Step 1: Kitsu Connection", "Step 1: Kitsu Connection")),
-			html.EscapeString(t(lang, "Kitsuのタスク変更を検知するために認証が必要です。", "Authentication is required so KitsuSync can detect task changes in Kitsu.")),
+			html.EscapeString(t(lang, "Kitsuのタスク変更を検知するために認証が必要です。メールアドレスとパスワードを入力して接続テストしてください。", "Authentication is required so KitsuSync can detect task changes. Enter your email and password, then test the connection.")),
 			html.EscapeString(stepBadgeText(lang, diag.Kitsu.Status)),
 			envNotice,
-			html.EscapeString(t(lang, "Detected Kitsu Host", "Detected Kitsu Host")),
-			html.EscapeString(t(lang, "変更が必要な場合は Manual Setup で編集できます。", "If this needs to change, edit it in Manual Setup.")),
+			html.EscapeString(t(lang, "Kitsu ホスト（自動検出）", "Kitsu Host (auto-detected)")),
+			step1HostNote,
 			html.EscapeString(detectedHost),
-			html.EscapeString(t(lang, "Detected Kitsu Host", "Detected Kitsu Host")),
+			html.EscapeString(t(lang, "Kitsu ホスト", "Kitsu Host")),
 			html.EscapeString(detectedHost),
-			html.EscapeString(t(lang, "メールアドレス", "Email")),
+			html.EscapeString(t(lang, "メールアドレス（Kitsu 管理者）", "Email (Kitsu admin)")),
 			html.EscapeString(t(lang, "パスワード", "Password")),
 			html.EscapeString(t(lang, "接続テスト", "Test Connection")),
 		)
 	case 2:
+		// Build hint as raw HTML so we can embed links.
+		guildIDHint := t(lang,
+			`Discord の <strong>開発者モード</strong> を有効にし（設定 › 詳細設定）、通知先サーバーのアイコンを右クリック → 「ID をコピー」。`,
+			`Enable <strong>Developer Mode</strong> in Discord (Settings › Advanced), right-click the server icon → "Copy Server ID".`,
+		)
+		botTokenHint := t(lang,
+			`このフォームは接続テスト専用です。Bot Token を保存するには <a href="/bot/admin/bot" style="color:var(--accent-2)">Bot設定</a> に入力してください。`,
+			`This form is for connection testing only. To save the Bot Token permanently, enter it in <a href="/bot/admin/bot" style="color:var(--accent-2)">Bot Settings</a>.`,
+		)
 		return fmt.Sprintf(`
 <section class="guided-step active">
   <div class="guided-head"><div><h3>%s</h3><p class="guided-note">%s</p></div><div class="guided-pill">%s</div></div>
@@ -601,21 +635,31 @@ func renderActiveStepBody(lang string, diag SetupDiagnostics, currentStep int, d
     <div class="guided-server-sub">%s</div>
   </div>
   <form id="guidedStep2Form" class="guided-form">
-    <div><label>%s</label><input name="bot_token" type="password" placeholder="hidden token" autocomplete="off"></div>
-    <div><label>%s</label><input name="guild_id" value="%s" placeholder="123456789012345678" autocomplete="off"></div>
-    <div class="guided-actions"><button class="btn" type="submit">%s</button></div>
+    <div>
+      <label>%s</label>
+      <input name="bot_token" type="password" placeholder="hidden token" autocomplete="off">
+      <p class="guided-note" style="font-size:.8rem;margin-top:4px">%s</p>
+    </div>
+    <div>
+      <label>%s</label>
+      <input name="guild_id" value="%s" placeholder="123456789012345678" autocomplete="off">
+      <p class="guided-note" style="font-size:.8rem;margin-top:4px">%s</p>
+    </div>
+    <div class="guided-actions"><button class="btn" type="submit" id="step2SubmitBtn">%s</button></div>
   </form>
   <div id="guidedStep2Result" class="guided-result hidden"></div>
 </section>`,
 			html.EscapeString(t(lang, "Step 2: Discord Bot", "Step 2: Discord Bot")),
-			html.EscapeString(t(lang, "Discordに通知を送るためにBotトークンとサーバーIDが必要です。", "A bot token and server ID are needed so KitsuSync can post notifications to Discord.")),
+			html.EscapeString(t(lang, "BotトークンとDiscordサーバーIDを入力し、接続・権限を確認します。", "Enter your bot token and Discord server ID to verify the connection and permissions.")),
 			html.EscapeString(stepBadgeText(lang, diag.Discord.Status)),
 			html.EscapeString(discordServerName),
 			html.EscapeString(discordServerDetail),
 			html.EscapeString(t(lang, "Bot Token", "Bot Token")),
-			html.EscapeString(t(lang, "Discord Server", "Discord Server")),
+			botTokenHint,
+			html.EscapeString(t(lang, "Discord Server ID（Guild ID）", "Discord Server ID (Guild ID)")),
 			html.EscapeString(fallbackGuildID),
-			html.EscapeString(t(lang, "確認する", "Validate Discord")),
+			guildIDHint,
+			html.EscapeString(t(lang, "接続・権限を確認する", "Validate Discord")),
 		)
 	case 3:
 		return renderGuidedStep3(lang, diag, projectOptions, defaultProjectID, step3Mode, fallbackGuildID, r)
@@ -704,17 +748,11 @@ func renderGuidedStep3(lang string, diag SetupDiagnostics, projectOptions, defau
           <option value="en">%s</option>
         </select>
       </div>
-      <div>
-        <label>%s</label>
-        <select name="mode">
-          <option value="create">%s</option>
-          <option value="reuse" disabled>%s</option>
-        </select>
-      </div>
+      <input type="hidden" name="mode" value="create">
       <div class="guided-actions">
         <button class="btn" type="submit">%s</button>
       </div>
-      <div class="guided-note">%s</div>
+      <p class="guided-note" style="font-size:.82rem;margin-top:4px">%s</p>
     </form>
   </div>
   <div id="guidedProjectPreviewResult" class="guided-result hidden"></div>
@@ -758,11 +796,8 @@ func renderGuidedStep3(lang string, diag SetupDiagnostics, projectOptions, defau
 		html.EscapeString(t(lang, "Language", "Language")),
 		html.EscapeString(t(lang, "日本語", "Japanese")),
 		html.EscapeString(t(lang, "英語", "English")),
-		html.EscapeString(t(lang, "Setup mode", "Setup mode")),
-		html.EscapeString(t(lang, "新規作成", "Create new channels")),
-		html.EscapeString(t(lang, "既存チャンネルを使う (v0.1.x 予定)", "Reuse existing channels (coming in v0.1.x)")),
 		html.EscapeString(t(lang, "Preview Setup", "Preview Setup")),
-		html.EscapeString(t(lang, "既存チャンネルを使う場合は v0.1.x で追加します。", "Reuse mode will be added in v0.1.x.")),
+		html.EscapeString(t(lang, "「Confirm and Create」を押すまでは Discord に何も作成されません。Preview はいつでもキャンセルできます。", `Nothing is created in Discord until you click "Confirm and Create". You can cancel the preview at any time.`)),
 		func() string {
 			if step3Mode == "plan" {
 				return "hidden"
@@ -792,7 +827,7 @@ func renderGuidedStep3(lang string, diag SetupDiagnostics, projectOptions, defau
 		}(),
 		html.EscapeString(t(lang, "Project Setup complete", "Project Setup complete")),
 		html.EscapeString("done"),
-		html.EscapeString(t(lang, "テスト通知成功で Step 3 が完了します。", "Step 3 completes when the test notification succeeds.")),
+		html.EscapeString(t(lang, "テスト通知が完了しました。Step 3 は完了です。", "Test notification delivered — Step 3 is complete.")),
 		html.EscapeString(t(lang, "テスト通知成功！セットアップが完了しました。", "Test notification succeeded! Setup is complete.")),
 		withLang("/bot/admin", r),
 		html.EscapeString(t(lang, "このまま完了する →", "Done — Go to Admin →")),
