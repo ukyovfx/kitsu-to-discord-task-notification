@@ -505,9 +505,15 @@ func DiscordQueueSend(data []kitsu.MessagePayload, conf config.Config, webhookUR
 					}
 				}
 				// 逶｣譟ｻ繝ｭ繧ｰ: 謌仙粥繝ｻ螟ｱ謨怜撫繧上★險倬鹸
+				projectGuildID := ""
+				if projectRow := model.FindProjectByKitsuID(db, task.Project.ID); projectRow != nil {
+					projectGuildID = projectRow.DiscordGuildID
+				}
 				model.WriteAuditLog(db, model.AuditLog{
 					TaskID:       taskID,
+					ProjectID:    task.Project.ID,
 					ProjectName:  task.Project.Name,
+					GuildID:      projectGuildID,
 					EntityName:   task.Entity.Name,
 					TaskType:     task.TaskType.TaskType.Name,
 					NewStatus:    task.TaskStatus.TaskStatus.ShortName,
@@ -718,12 +724,12 @@ func main() {
 	})
 	if err != nil {
 		slog.Fatal("failed to connect database")
-		os.Exit(0)
+		os.Exit(1)
 	}
 	sqlDB, err := configureSQLite(db)
 	if err != nil {
 		slog.Fatal("failed to configure sqlite", "err", err)
-		os.Exit(0)
+		os.Exit(1)
 	}
 	// Remove the legacy single-column unique index before the composite migration.
 	db.Exec("DROP INDEX IF EXISTS idx_checker_maps_task_type")
@@ -742,6 +748,8 @@ func main() {
 	model.PurgeLegacySensitiveData(db)
 
 	setup.SeedFromConfig(db, conf)
+	_, seedGuildID, _ := getDiscordSettings(db, conf)
+	model.SeedProjectGuildFallback(db, seedGuildID)
 
 	discord.UserMapResolver = func(projectID, kitsuName, kitsuEmail string) string {
 		return model.GetUserMapForProject(db, projectID, kitsuName, kitsuEmail)
@@ -760,7 +768,7 @@ func main() {
 			err := os.Mkdir("./dump", os.ModeDir)
 			if err != nil {
 				slog.Fatal("failed to create dir")
-				os.Exit(0)
+				os.Exit(1)
 			}
 		}
 	}
@@ -775,6 +783,7 @@ func main() {
 	token := basicauth.AuthForJWTToken(kitsuHostname+"api/auth/login", kitsuEmail, kitsuPassword)
 	if token == "" {
 		slog.Fatal("Initial Kitsu authentication failed 窶・check hostname/email/password in conf.toml or /bot/admin/bot")
+		os.Exit(1)
 	}
 	os.Setenv("KitsuJWTToken", token)
 	if conf.Log {
@@ -831,8 +840,14 @@ func main() {
 
 	setupHandler := func(w http.ResponseWriter, r *http.Request) {
 		kitsuHost, _, _ := getKitsuCreds(db, conf)
-		botToken, guildID, _ := getDiscordSettings(db, conf)
-		setup.Handler(kitsuHost, guildID, botToken, db)(w, r)
+		botToken, fallbackGuildID, _ := getDiscordSettings(db, conf)
+		setup.Handler(kitsuHost, fallbackGuildID, botToken, db)(w, r)
+	}
+
+	setupCredsFunc := func() (string, string, string, string) {
+		h, _, _ := getKitsuCreds(db, conf)
+		tok, gid, wh := getDiscordSettings(db, conf)
+		return h, tok, gid, wh
 	}
 
 	loginHandler := func(w http.ResponseWriter, r *http.Request) {
@@ -848,23 +863,20 @@ func main() {
 	mux.HandleFunc("/setup", setup.RequireSession(setupHandler))
 	mux.HandleFunc("/bot/setup", setup.RequireSession(setupHandler))
 
-	mux.HandleFunc("/setup-wizard", setup.RequireSession(setup.WizardHandler()))
-	mux.HandleFunc("/bot/setup-wizard", setup.RequireSession(setup.WizardHandler()))
+	mux.HandleFunc("/setup-wizard", setup.RequireSession(setup.WizardHandler(db, setupCredsFunc)))
+	mux.HandleFunc("/bot/setup-wizard", setup.RequireSession(setup.WizardHandler(db, setupCredsFunc)))
 
 	// Setup diagnostic JSON API — registered under both root and /bot prefix.
-	setupCredsFunc := func() (string, string, string, string) {
-		h, _, _ := getKitsuCreds(db, conf)
-		tok, gid, wh := getDiscordSettings(db, conf)
-		return h, tok, gid, wh
-	}
 	setupAPIRoutes := func(prefix string) {
 		mux.HandleFunc(prefix+"/api/setup/status", setup.RequireSession(setup.SetupStatusHandler(
 			db, conf.Kitsu.RequestInterval, setupCredsFunc,
 		)))
 		mux.HandleFunc(prefix+"/api/setup/projects", setup.RequireSession(setup.ProjectsHandler(db)))
+		mux.HandleFunc(prefix+"/api/setup/preview-project", setup.RequireSession(setup.PreviewProjectHandler(db, setupCredsFunc)))
 		mux.HandleFunc(prefix+"/api/setup/apply-project", setup.RequireSession(setup.ApplyProjectHandler(db, setupCredsFunc)))
-		mux.HandleFunc(prefix+"/api/setup/test-kitsu", setup.RequireSession(setup.TestKitsuHandler()))
-		mux.HandleFunc(prefix+"/api/setup/test-discord", setup.RequireSession(setup.TestDiscordHandler()))
+		mux.HandleFunc(prefix+"/api/setup/test-kitsu", setup.RequireSession(setup.TestKitsuHandler(db)))
+		mux.HandleFunc(prefix+"/api/setup/test-discord", setup.RequireSession(setup.TestDiscordHandler(db)))
+		mux.HandleFunc(prefix+"/api/setup/test-notification", setup.RequireSession(setup.TestNotificationHandler(db, setupCredsFunc)))
 		mux.HandleFunc(prefix+"/api/setup/mapping", setup.RequireSession(setup.MappingStateHandler(db)))
 		mux.HandleFunc(prefix+"/api/setup/mapping/users", setup.RequireSession(setup.SaveUserMappingHandler(db)))
 		mux.HandleFunc(prefix+"/api/setup/mapping/checkers", setup.RequireSession(setup.SaveCheckerMappingHandler(db)))
@@ -896,6 +908,11 @@ func main() {
 			}
 		}
 		mux.HandleFunc(prefix+"/admin/bot", setup.RequireSession(setup.BotHandler(db, kitsuReconnect)))
+		mux.HandleFunc(prefix+"/admin/setup", setup.RequireSession(setup.SetupManualHandler(db, setupCredsFunc)))
+		mux.HandleFunc(prefix+"/admin/projects", setup.RequireSession(func(w http.ResponseWriter, r *http.Request) {
+			_, fallbackGuildID, _ := getDiscordSettings(db, conf)
+			setup.AdminProjectsHandler(db, fallbackGuildID)(w, r)
+		}))
 		mux.HandleFunc(prefix+"/admin/audit", setup.RequireSession(setup.AuditLogHandler(db)))
 		mux.HandleFunc(prefix+"/admin/health", setup.RequireSession(setup.HealthHandler(db)))
 		mux.HandleFunc(prefix+"/admin/diagnostics", setup.RequireSession(setup.DiagnosticsHandler(db, func() (string, string, string, string) {

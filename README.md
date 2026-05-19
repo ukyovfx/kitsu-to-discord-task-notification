@@ -2,7 +2,7 @@
 
 [![Build](https://img.shields.io/badge/build-GitHub%20Actions-blue)](#)
 [![Docker](https://img.shields.io/badge/runtime-Docker-2496ED)](#quick-start)
-[![License](https://img.shields.io/badge/license-MIT-green)](#license)
+[![License](https://img.shields.io/badge/license-Apache--2.0-green)](#license)
 [![Security Policy](https://img.shields.io/badge/security-policy-important)](#contributing-and-security)
 [![Release](https://img.shields.io/badge/release-v0.1.0-orange)](#v010-release-focus)
 
@@ -52,9 +52,9 @@ See `RELEASE_NOTES_v0.1.0.md` for the full release summary.
 
 ## Limitations (v0.1.0)
 
-This release focuses on **single-project setups** with **notification routing and task tracking**. The following are **not** supported yet:
+This release supports **single shared bot token** with **project-specific Discord guild assignment**. The following are **not** supported yet:
 
-- **Multiple concurrent projects** — admin dashboard shows active projects but doesn't support project-scoped user/checker mappings (planned for v0.2.0)
+- **Multiple bot tokens** — one shared bot token is used across all projects/guilds
 - **Full Discord channel management** — KitsuSync creates channels but cannot delete or restructure them; manual cleanup required
 - **All Kitsu task statuses** — filtering configured for `wfa`, `retake`, `done` and `assign` notifications only; other status transitions are silently dropped
 - **Complete task detail retrieval** — reviews all task fields but does not embed full task description, comments history, or rich metadata
@@ -208,11 +208,12 @@ Use the public `/bot/*` paths exposed by your proxy, for example:
 ### Operator checklist
 
 1. Open `/bot/login` and sign in with your Kitsu manager or admin account.
-2. If runtime credentials are not already in `.env.local`, run Bot Setup from `/bot/setup`.
-3. Create or choose a Kitsu project from Project Setup.
-4. Confirm the Discord category, channels, and webhooks are created.
-5. Review routing and user mappings in `/bot/admin`.
-6. Wait for polling logs such as `Connected to Kitsu`, `Got tasks`, and `Done FilterTasks`.
+2. If runtime credentials are not already in `.env.local`, run Bot Setup from `/bot/admin/bot`.
+3. Open `/bot/admin/projects` and assign a Discord Guild ID for each Kitsu project.
+4. Create or choose a Kitsu project from Project Setup.
+5. Confirm the Discord category, channels, and webhooks are created in the assigned guild.
+6. Review routing and user mappings in `/bot/admin`.
+7. Wait for polling logs such as `Connected to Kitsu`, `Got tasks`, and `Done FilterTasks`.
 
 ## Environment Variables
 
@@ -351,4 +352,6 @@ location ~ ^/api/pictures/thumbnails/preview-files/ {
 
 ## License
 
-MIT. Keep the upstream notices when redistributing.
+Apache License 2.0. See [`LICENSE`](LICENSE).
+
+This project is a fork of [keshon/kitsu-to-discord-task-notification](https://github.com/keshon/kitsu-to-discord-task-notification) (Apache 2.0). Keep the upstream copyright and `NOTICE` (if any) when redistributing.

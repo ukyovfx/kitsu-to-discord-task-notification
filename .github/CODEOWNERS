@@ -1,17 +1,16 @@
-# Replace @maintainers with the real GitHub user or team before publishing.
 # Default owner
-* @maintainers
+* @ukyovfx
 
 # Security-sensitive paths
-/.env.example @maintainers
-/conf.toml.example @maintainers
-/docker-compose.yml @maintainers
-/SECURITY.md @maintainers
-/src/setup/ @maintainers
-/src/main.go @maintainers
+/.env.example @ukyovfx
+/conf.toml.example @ukyovfx
+/docker-compose.yml @ukyovfx
+/SECURITY.md @ukyovfx
+/src/setup/ @ukyovfx
+/src/main.go @ukyovfx
 
 # GitHub repository operations
-/.github/ @maintainers
-/README.md @maintainers
-/CONTRIBUTING.md @maintainers
-/CHANGELOG.md @maintainers
+/.github/ @ukyovfx
+/README.md @ukyovfx
+/CONTRIBUTING.md @ukyovfx
+/CHANGELOG.md @ukyovfx
