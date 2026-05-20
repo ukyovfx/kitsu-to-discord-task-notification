@@ -1,0 +1,1 @@
+{{if .ChannelName}}→ #{{.ChannelName}}{{end}}

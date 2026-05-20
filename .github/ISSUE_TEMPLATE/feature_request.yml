@@ -1,0 +1,45 @@
+name: Feature request
+description: Suggest an improvement with operator or contributor impact explained.
+title: "[Feature] "
+labels: ["enhancement", "needs-triage"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem or friction
+      description: What is difficult today?
+      placeholder: First-time setup still requires too much manual Discord configuration.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed improvement
+      description: Describe the desired behavior.
+    validations:
+      required: true
+  - type: textarea
+    id: operator_impact
+    attributes:
+      label: Operator or contributor impact
+      description: Explain who benefits and how.
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Setup / admin UI
+        - Notification routing
+        - Docs / onboarding
+        - Docker / deployment
+        - Maintainer workflow
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: constraints
+    attributes:
+      label: Constraints or risks
+      description: Mention runtime, auth, proxy, or rollout concerns if any.

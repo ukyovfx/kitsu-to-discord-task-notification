@@ -20,7 +20,7 @@ func Info(resp *http.Response, respBody []byte) {
 		runtime.Callers(2, pc)
 		f := runtime.FuncForPC(pc[0])
 		file, line := f.FileLine(pc[0])
-		slog.Info("%s:%d %s\n", file, line, f.Name())
+		slog.Info("debug response", "file", file, "line", line, "func", f.Name())
 
 		// Headers
 		prettyResp, _ := prettyjson.Marshal(resp)
@@ -53,11 +53,10 @@ func Info(resp *http.Response, respBody []byte) {
 		dt := time.Now()
 
 		// Pretty print
-		slog.Info("--start--")
-		slog.Info(dt.String())
-		slog.Info("Status : ", resp.StatusCode)
-		slog.Info("Headers : ", string(prettyResp))
-		slog.Info("Body : ", string(prettyBody))
-		slog.Info("--end--\n")
+		slog.Info("--start--", "time", dt.String())
+		slog.Info("response status", "status", resp.StatusCode)
+		slog.Info("response headers", "headers", string(prettyResp))
+		slog.Info("response body", "body", string(prettyBody))
+		slog.Info("--end--")
 	}
 }

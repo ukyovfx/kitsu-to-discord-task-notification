@@ -1,18 +1,14 @@
-FROM golang:1.16-alpine AS mybuildstage
+FROM golang:1.21-bookworm AS builder
 
-RUN apk add build-base
-RUN apk add sqlite
+WORKDIR /app
+COPY go.mod go.sum ./
+RUN go mod download
+COPY . .
+RUN CGO_ENABLED=1 go build -o kitsu-discord ./src
 
-ADD project-src /usr/project
+FROM debian:bookworm-slim
 
-RUN sqlite3 sqlite.db "VACUUM;"
-
-WORKDIR /usr/project
-
-RUN go build -o app src/main.go
-
-FROM alpine:3.12.2
-
-COPY --from=mybuildstage /usr/project /usr/project
-
-RUN /bin/sh -c "apk add --no-cache bash"
+RUN apt-get update && apt-get install -y ca-certificates curl tzdata && rm -rf /var/lib/apt/lists/*
+WORKDIR /app
+COPY --from=builder /app/kitsu-discord .
+CMD ["./kitsu-discord"]

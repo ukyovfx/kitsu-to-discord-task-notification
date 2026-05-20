@@ -7,63 +7,67 @@ import (
 	"encoding/json"
 	"io/ioutil"
 	"net/http"
+	"time"
 
 	"github.com/gookit/slog"
 )
 
-// Basic authentication for JWT token
+// AuthForJWTToken authenticates against Kitsu and returns a JWT.
+// Returns "" on any failure (network, bad credentials, malformed response).
+// Callers must check for the empty string and react accordingly — the
+// hourly refresher in main.go keeps the previous token if this returns "".
 func AuthForJWTToken(url, email, password string) string {
-
-	//Encode the data
 	type Payload struct {
 		Email    string `json:"email,omitempty"`
 		Password string `json:"password,omitempty"`
 	}
 
-	payload := &Payload{
-		Email:    email,
-		Password: password,
-	}
+	payload := &Payload{Email: email, Password: password}
 
-	putBody, _ := json.Marshal(payload)
+	putBody, err := json.Marshal(payload)
+	if err != nil {
+		slog.Error("basicauth: marshal failed", "err", err)
+		return ""
+	}
 	requestBody := bytes.NewBuffer(putBody)
 
-	// Create client
-	client := &http.Client{}
+	client := &http.Client{Timeout: 15 * time.Second}
 
-	// Create request
 	req, err := http.NewRequest(http.MethodPost, url, requestBody)
 	if err != nil {
-		slog.Fatal(err)
+		slog.Error("basicauth: NewRequest failed", "err", err, "url", url)
+		return ""
 	}
-
-	// Set content type
 	req.Header.Set("Content-Type", "application/json")
 
-	// Fetch Request
 	resp, err := client.Do(req)
 	if err != nil {
-		slog.Fatal(err)
+		slog.Error("basicauth: client.Do failed", "err", err, "url", url)
+		return ""
 	}
 	defer resp.Body.Close()
 
-	// Read Response Body
 	respBody, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		slog.Fatal(err)
+		slog.Error("basicauth: read body failed", "err", err)
+		return ""
 	}
 
-	// Display Results
 	debug.Info(resp, respBody)
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		slog.Error("basicauth: non-2xx response — check Kitsu credentials in conf.toml",
+			"status", resp.StatusCode)
+		return ""
+	}
 
 	type Response struct {
 		Token string `json:"access_token"`
 	}
-
 	var jwt Response
-	err = json.Unmarshal(respBody, &jwt)
-	if err != nil {
-		slog.Fatal("Error! Check your Kitsu credentials in conf.toml")
+	if err := json.Unmarshal(respBody, &jwt); err != nil {
+		slog.Error("basicauth: unmarshal failed — check Kitsu credentials in conf.toml", "err", err)
+		return ""
 	}
 
 	return jwt.Token

@@ -1,0 +1,16 @@
+# Default owner
+* @ukyovfx
+
+# Security-sensitive paths
+/.env.example @ukyovfx
+/conf.toml.example @ukyovfx
+/docker-compose.yml @ukyovfx
+/SECURITY.md @ukyovfx
+/src/setup/ @ukyovfx
+/src/main.go @ukyovfx
+
+# GitHub repository operations
+/.github/ @ukyovfx
+/README.md @ukyovfx
+/CONTRIBUTING.md @ukyovfx
+/CHANGELOG.md @ukyovfx

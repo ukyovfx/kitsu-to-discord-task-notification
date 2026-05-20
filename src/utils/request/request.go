@@ -4,69 +4,152 @@ import (
 	"app/src/utils/debug"
 	"bytes"
 	"encoding/json"
-	"io"
 	"io/ioutil"
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/gookit/slog"
 )
 
-// Request wrapper
+// Do は JWT 付き HTTP リクエストを実行し、レスポンスボディを文字列で返す。
+//
+// 失敗時は slog.Error を出してから空文字列を返す（slog.Fatal は使わない）。
+// 一時的なネットワーク障害・5xx・429 に対してはリトライ＋指数バックオフを行う。
+// 4xx（429 を除く）は永続的エラーとみなし即座に返る。
 func Do(token, method, url string, payload, unmarshal interface{}) string {
-	// Marshal payload to bytes
-	var body io.ReadWriter
+	const maxAttempts = 3
+	// 試行間の待機時間: 2s → 6s
+	retryDelays := []time.Duration{2 * time.Second, 6 * time.Second}
 
+	// payload の JSON 化は一度だけ行う（ループ内で bytes.NewBuffer でコピーして再利用）
+	var payloadBytes []byte
 	if payload != nil {
-		buf, err := json.Marshal(payload)
+		var err error
+		payloadBytes, err = json.Marshal(payload)
 		if err != nil {
-			slog.Fatal(err)
+			slog.Error("request.Do: marshal payload failed", "err", err, "url", url)
+			return ""
 		}
-		body = bytes.NewBuffer(buf)
 	}
 
-	// Create client
-	client := &http.Client{}
+	for attempt := 0; attempt < maxAttempts; attempt++ {
+		if attempt > 0 {
+			delay := retryDelays[attempt-1]
+			slog.Warn("request.Do: transient failure — retrying",
+				"attempt", attempt+1,
+				"maxAttempts", maxAttempts,
+				"delay", delay,
+				"url", url)
+			time.Sleep(delay)
+		}
 
-	// Create request
-	req, err := http.NewRequest(method, url, body)
+		// body は試行ごとに新しい Reader を作成する（io.Reader は一度読むと使い切り）
+		var body *bytes.Buffer
+		if payloadBytes != nil {
+			body = bytes.NewBuffer(payloadBytes)
+		}
+
+		result := attemptOnce(token, method, url, body, unmarshal)
+		switch result.status {
+		case statusSuccess:
+			return result.body
+		case statusPermanent:
+			// 4xx 等の永続エラーはリトライ不要
+			return ""
+		case statusTransient:
+			// 次のループでリトライ
+			continue
+		}
+	}
+
+	slog.Error("request.Do: all attempts exhausted", "url", url, "maxAttempts", maxAttempts)
+	return ""
+}
+
+type attemptStatus int
+
+const (
+	statusSuccess   attemptStatus = iota
+	statusTransient               // リトライすべき一時エラー
+	statusPermanent               // リトライ不要な永続エラー
+)
+
+type attemptResult struct {
+	status attemptStatus
+	body   string
+}
+
+func attemptOnce(token, method, url string, body *bytes.Buffer, unmarshal interface{}) attemptResult {
+	client := &http.Client{Timeout: 30 * time.Second}
+
+	var req *http.Request
+	var err error
+	if body != nil {
+		req, err = http.NewRequest(method, url, body)
+	} else {
+		req, err = http.NewRequest(method, url, nil)
+	}
 	if err != nil {
-		slog.Fatal(err)
+		slog.Error("request.Do: NewRequest failed", "err", err, "url", url)
+		return attemptResult{status: statusPermanent}
 	}
 
-	// Set content type
 	req.Header.Set("Content-Type", "application/json")
-
 	if token != "" {
 		req.Header.Set("Authorization", "Bearer "+token)
 	}
 
-	// Fetch request
 	resp, err := client.Do(req)
 	if err != nil {
-		slog.Fatal(err)
+		slog.Error("request.Do: client.Do failed", "err", err, "method", method, "url", url)
+		return attemptResult{status: statusTransient}
 	}
 	defer resp.Body.Close()
 
-	// Read response body
 	respBody, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		slog.Fatal(err)
+		slog.Error("request.Do: read body failed", "err", err, "url", url)
+		return attemptResult{status: statusTransient}
 	}
 
-	// Display results
 	if os.Getenv("Debug") == "true" {
 		debug.Info(resp, respBody)
 	}
 
+	// 429 Too Many Requests — 一時的なレート制限
+	if resp.StatusCode == 429 {
+		slog.Warn("request.Do: rate limited (429)",
+			"url", url,
+			"retryAfter", resp.Header.Get("Retry-After"))
+		return attemptResult{status: statusTransient}
+	}
+
+	// 5xx — サーバーサイドの一時障害
+	if resp.StatusCode >= 500 {
+		slog.Error("request.Do: 5xx response",
+			"status", resp.StatusCode,
+			"method", method,
+			"url", url)
+		return attemptResult{status: statusTransient}
+	}
+
+	// その他の非 2xx（4xx 等）— 永続エラー
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		slog.Error("request.Do: non-2xx response",
+			"status", resp.StatusCode,
+			"method", method,
+			"url", url)
+		return attemptResult{status: statusPermanent}
+	}
+
+	// 成功
 	if unmarshal != nil {
-		err = json.Unmarshal([]byte(respBody), &unmarshal)
-		//err = json.NewDecoder(resp.Body).Decode(&unmarshal)
-		if err != nil {
-			slog.Fatal(err)
+		if err := json.Unmarshal(respBody, &unmarshal); err != nil {
+			slog.Error("request.Do: unmarshal failed", "err", err, "url", url)
+			return attemptResult{status: statusPermanent}
 		}
 	}
 
-	// Return string body
-	return string(respBody)
+	return attemptResult{status: statusSuccess, body: string(respBody)}
 }

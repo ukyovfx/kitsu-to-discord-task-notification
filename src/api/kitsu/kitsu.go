@@ -8,6 +8,16 @@ import (
 	"os"
 )
 
+// kitsuBase は Kitsu ベース URL を返す。
+// 環境変数 KITSU_HOSTNAME が設定されている場合はそちらを優先する。
+// これにより管理画面（/bot/admin/bot）で設定した Hostname が反映される。
+func kitsuBase() string {
+	if h := os.Getenv("KITSU_HOSTNAME"); h != "" {
+		return h
+	}
+	return config.Read().Kitsu.Hostname
+}
+
 type Task struct {
 	Assignees       []string    `json:"assignees,omitempty"`
 	ID              string      `json:"id,omitempty"`
@@ -154,7 +164,9 @@ type ProjectStatuses struct {
 }
 
 type MessagePayload struct {
-	PreviousStatusName string // we store task status from DB and consider it 'old/prevous'
+	PreviousStatusName    string // we store task status from DB and consider it 'old/prevous'
+	IsCommentOnly         bool   // true when only the comment changed (no status/timestamp change)
+	IsAssignNotification  bool   // true when task status is "none" (TODO) and notifyOnAssign is enabled
 	Project            struct {
 		Project
 	}
@@ -188,7 +200,7 @@ type MessagePayload struct {
 }
 
 func GetComments() Comments {
-	path := config.Read().Kitsu.Hostname + "api/data/comments"
+	path := kitsuBase() + "api/data/comments"
 	response := Comments{}
 	request.Do(os.Getenv("KitsuJWTToken"), http.MethodGet, path, nil, &response.Each)
 
@@ -196,7 +208,7 @@ func GetComments() Comments {
 }
 
 func GetComment(objectID string) Comments {
-	path := config.Read().Kitsu.Hostname + "api/data/comments?object_id=" + objectID
+	path := kitsuBase() + "api/data/comments?object_id=" + objectID
 	response := Comments{}
 	request.Do(os.Getenv("KitsuJWTToken"), http.MethodGet, path, nil, &response.Each)
 
@@ -204,16 +216,15 @@ func GetComment(objectID string) Comments {
 }
 
 func GetTasks() Tasks {
-	path := config.Read().Kitsu.Hostname + "api/data/tasks?relations=true"
+	path := kitsuBase() + "api/data/tasks?relations=true"
 	response := Tasks{}
-	println(os.Getenv("KitsuJWTToken"))
 	request.Do(os.Getenv("KitsuJWTToken"), http.MethodGet, path, nil, &response.Each)
 
 	return response
 }
 
 func GetTask(taskID string) Task {
-	path := config.Read().Kitsu.Hostname + "api/data/tasks/" + taskID
+	path := kitsuBase() + "api/data/tasks/" + taskID
 	response := Task{}
 	request.Do(os.Getenv("KitsuJWTToken"), http.MethodGet, path, nil, &response)
 
@@ -221,7 +232,7 @@ func GetTask(taskID string) Task {
 }
 
 func GetPerson(personID string) Person {
-	path := config.Read().Kitsu.Hostname + "api/data/persons/" + personID
+	path := kitsuBase() + "api/data/persons/" + personID
 	response := Person{}
 	request.Do(os.Getenv("KitsuJWTToken"), http.MethodGet, path, nil, &response)
 
@@ -229,7 +240,7 @@ func GetPerson(personID string) Person {
 }
 
 func GetPersons() Persons {
-	path := config.Read().Kitsu.Hostname + "api/data/persons/"
+	path := kitsuBase() + "api/data/persons/"
 	response := Persons{}
 	request.Do(os.Getenv("KitsuJWTToken"), http.MethodGet, path, nil, &response.Each)
 
@@ -237,7 +248,7 @@ func GetPersons() Persons {
 }
 
 func GetEntities() Entities {
-	path := config.Read().Kitsu.Hostname + "api/data/entities/"
+	path := kitsuBase() + "api/data/entities/"
 	response := Entities{}
 	request.Do(os.Getenv("KitsuJWTToken"), http.MethodGet, path, nil, &response.Each)
 
@@ -245,7 +256,7 @@ func GetEntities() Entities {
 }
 
 func GetEntity(EntityID string) Entity {
-	path := config.Read().Kitsu.Hostname + "api/data/entities/" + EntityID
+	path := kitsuBase() + "api/data/entities/" + EntityID
 	response := Entity{}
 	request.Do(os.Getenv("KitsuJWTToken"), http.MethodGet, path, nil, &response)
 
@@ -253,7 +264,7 @@ func GetEntity(EntityID string) Entity {
 }
 
 func GetEntityTypes() EntityTypes {
-	path := config.Read().Kitsu.Hostname + "api/data/entity-types/"
+	path := kitsuBase() + "api/data/entity-types/"
 	response := EntityTypes{}
 	request.Do(os.Getenv("KitsuJWTToken"), http.MethodGet, path, nil, &response.Each)
 
@@ -261,7 +272,7 @@ func GetEntityTypes() EntityTypes {
 }
 
 func GetEntityType(entityTypeID string) EntityType {
-	path := config.Read().Kitsu.Hostname + "api/data/entity-types/" + entityTypeID
+	path := kitsuBase() + "api/data/entity-types/" + entityTypeID
 	response := EntityType{}
 	request.Do(os.Getenv("KitsuJWTToken"), http.MethodGet, path, nil, &response)
 
@@ -269,7 +280,7 @@ func GetEntityType(entityTypeID string) EntityType {
 }
 
 func GetTaskStatuses() TaskStatuses {
-	path := config.Read().Kitsu.Hostname + "api/data/task-status/"
+	path := kitsuBase() + "api/data/task-status/"
 	response := TaskStatuses{}
 	request.Do(os.Getenv("KitsuJWTToken"), http.MethodGet, path, nil, &response.Each)
 
@@ -277,7 +288,7 @@ func GetTaskStatuses() TaskStatuses {
 }
 
 func GetTaskStatus(taskStatusID string) TaskStatus {
-	path := config.Read().Kitsu.Hostname + "api/data/task-status/" + taskStatusID
+	path := kitsuBase() + "api/data/task-status/" + taskStatusID
 	response := TaskStatus{}
 	request.Do(os.Getenv("KitsuJWTToken"), http.MethodGet, path, nil, &response)
 
@@ -285,7 +296,7 @@ func GetTaskStatus(taskStatusID string) TaskStatus {
 }
 
 func GetTaskType(taskID string) TaskType {
-	path := config.Read().Kitsu.Hostname + "api/data/task-types/" + taskID
+	path := kitsuBase() + "api/data/task-types/" + taskID
 	response := TaskType{}
 	request.Do(os.Getenv("KitsuJWTToken"), http.MethodGet, path, nil, &response)
 
@@ -293,7 +304,7 @@ func GetTaskType(taskID string) TaskType {
 }
 
 func GetTaskTypes() TaskTypes {
-	path := config.Read().Kitsu.Hostname + "api/data/task-types/"
+	path := kitsuBase() + "api/data/task-types/"
 	response := TaskTypes{}
 	request.Do(os.Getenv("KitsuJWTToken"), http.MethodGet, path, nil, &response.Each)
 
@@ -301,7 +312,7 @@ func GetTaskTypes() TaskTypes {
 }
 
 func GetProject(projectID string) Project {
-	path := config.Read().Kitsu.Hostname + "api/data/projects/" + projectID
+	path := kitsuBase() + "api/data/projects/" + projectID
 	response := Project{}
 	request.Do(os.Getenv("KitsuJWTToken"), http.MethodGet, path, nil, &response)
 
@@ -309,7 +320,7 @@ func GetProject(projectID string) Project {
 }
 
 func GetProjects() Projects {
-	path := config.Read().Kitsu.Hostname + "api/data/projects/"
+	path := kitsuBase() + "api/data/projects/"
 	response := Projects{}
 	request.Do(os.Getenv("KitsuJWTToken"), http.MethodGet, path, nil, &response.Each)
 
@@ -317,7 +328,7 @@ func GetProjects() Projects {
 }
 
 func GetProjectStatus(projectStatusID string) ProjectStatus {
-	path := config.Read().Kitsu.Hostname + "api/data/project-status/" + projectStatusID
+	path := kitsuBase() + "api/data/project-status/" + projectStatusID
 	response := ProjectStatus{}
 	request.Do(os.Getenv("KitsuJWTToken"), http.MethodGet, path, nil, &response)
 

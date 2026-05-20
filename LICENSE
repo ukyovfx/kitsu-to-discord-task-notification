@@ -186,7 +186,10 @@
       same "printed page" as the copyright notice for easier
       identification within third-party archives.
 
-   Copyright 2021 Innokentiy Sokolov
+   Original work Copyright 2021 Innokentiy Sokolov
+   Modified work Copyright 2024 ukyovfx
+   (Forked from https://github.com/keshon/kitsu-to-discord-task-notification
+    and heavily extended for Japanese VFX/animation production workflows.)
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.

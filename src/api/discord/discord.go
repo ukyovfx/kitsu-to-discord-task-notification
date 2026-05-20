@@ -2,100 +2,684 @@ package discord
 
 import (
 	"app/src/api/kitsu"
+	"app/src/model"
 	"app/src/utils/config"
-	"app/src/utils/request"
 	"app/src/utils/truncate"
 	"bytes"
+	"encoding/json"
 	"fmt"
+	"io"
 	"io/ioutil"
-	"log"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"text/template"
-)
+	"time"
 
-// Discord embed API
-// https://discord.com/developers/docs/resources/channel#embed-object-embed-structure
+	"gorm.io/gorm"
+)
 
 type EmbedAuthor struct {
 	Name string `json:"name"`
 }
-
 type EmbedFooter struct {
 	Text string `json:"text"`
 }
-
-type Embed struct {
-	Description string      `json:"description"` // 4096 characters
-	Title       string      `json:"title"`       // 256 characters
-	Color       int         `json:"color,omitempty"`
-	Url         string      `json:"url"`
-	Author      EmbedAuthor `json:"author,omitempty"`
-	Footer      EmbedFooter `json:"footer,omitempty"`
+type EmbedField struct {
+	Name   string `json:"name"`
+	Value  string `json:"value"`
+	Inline bool   `json:"inline"`
 }
+type EmbedImage struct {
+	URL string `json:"url"`
+}
+type Embed struct {
+	Description string       `json:"description,omitempty"`
+	Title       string       `json:"title,omitempty"`
+	Color       int          `json:"color,omitempty"`
+	Url         string       `json:"url,omitempty"`
+	Author      EmbedAuthor  `json:"author,omitempty"`
+	Footer      EmbedFooter  `json:"footer,omitempty"`
+	Fields      []EmbedField `json:"fields,omitempty"`
+	Image       *EmbedImage  `json:"image,omitempty"`
+}
+
 type Payload struct {
 	Username  string  `json:"username,omitempty"`
 	AvatarUrl string  `json:"avatar_url,omitempty"`
 	Content   string  `json:"content"`
 	Embeds    []Embed `json:"embeds,omitempty"`
 }
-
 type Assignee struct {
 	Fullname string
 	Email    string
 	Phone    string
 }
-
 type Template struct {
-	ProjectName    string
-	GroupName      string
-	ParentName     string
-	TaskName       string
-	TaskType       string
-	SubTaskName    string
-	CurrentStatus  string
-	PreviousStatus string
-	CommentContent string
-	CommentAuthor  string
-	EntityType     string
-	Assignees      []Assignee
+	ProjectName             string
+	GroupName               string
+	ParentName              string
+	TaskName                string
+	TaskType                string
+	CurrentStatus           string
+	PreviousStatus          string
+	CommentContent          string
+	CommentAuthor           string
+	EntityType              string
+	Assignees               []Assignee
+	AssigneesStr            string
+	TaskURL                 string
+	MentionContent          string
+	ProcessEmoji            string
+	StatusMessage           string
+	StatusUpper             string
+	StatusEmoji             string
+	GoogleDriveURL          string
+	PreviewImageURL         string // Kitsu プレビュー画像 URL（空ならスキップ）
+	IsCommentOnly           bool   // コメントのみの更新（ステータス変化なし）
+	IsAssignNotification    bool   // 新規タスクアサイン（TODO ステータス、notifyOnAssign=true）
+	StatusTransitionMessage string // ステータス遷移を説明するメッセージ
+	ChannelName             string // 通知先の Discord チャンネル名（ルーティング確認用）
 }
 
-func SendMessageBunch(conf config.Config, data []kitsu.MessagePayload, webHookURL string) {
-	payload := Payload{}
-	payload.Content = ""
+// Discord APIのメッセージ作成レスポンス
+type DiscordMessage struct {
+	ID        string `json:"id"`
+	ChannelID string `json:"channel_id"` // スレッド作成時はここにスレッドIDが入る
+}
+
+// UserMapResolver は Kitsu 名 → Discord ID を解決するフック。
+// main 起動時に DB バックエンドの実装を注入する。
+// nil の場合は conf.Mention.UserMap にフォールバックする。
+// projectID はプロジェクトスコープ検索に使用; kitsuEmail はリネーム時のフォールバック検索に使用（空でも可）。
+var UserMapResolver func(projectID, kitsuName, kitsuEmail string) string
+
+// CheckerResolver はタスクタイプ名 → チェッカーの Discord ID 一覧を解決するフック。
+// nil の場合は conf.Mention.Checkers にフォールバックする。
+// projectID はプロジェクトスコープ検索に使用する。
+var CheckerResolver func(projectID, taskType string) []string
+
+// GoogleDriveURLResolver はプロジェクト ID に対応するファイルストレージ URL を返すフック。
+// プロジェクトごとの URL を DB から引く。nil または空文字の場合は conf.GoogleDrive.URL にフォールバック。
+var GoogleDriveURLResolver func(projectID string) string
+
+// SendResult は SendMessage / SendMessageBunch の戻り値
+type SendResult struct {
+	MessageID string // Discord メッセージID
+	ThreadID  string // Discord スレッドID（UseThreads=true 時のみ）
+}
+
+// containsIgnoreCase reports whether `target` (case-insensitive) is present in `list`.
+func containsIgnoreCase(list []string, target string) bool {
+	for _, s := range list {
+		if strings.EqualFold(s, target) {
+			return true
+		}
+	}
+	return false
+}
+
+func normalizeNotificationLang(lang string) string {
+	if strings.EqualFold(strings.TrimSpace(lang), "en") {
+		return "en"
+	}
+	return "ja"
+}
+
+func localizedTemplatePreset(tplPreset, notifLang string) string {
+	if strings.EqualFold(tplPreset, "rich") && normalizeNotificationLang(notifLang) == "en" {
+		return "eng"
+	}
+	return tplPreset
+}
+
+func localizedStatusMessageInfo(status, lang string) (string, string) {
+	switch strings.ToUpper(status) {
+	case "WFA":
+		if normalizeNotificationLang(lang) == "en" {
+			return "Please review", "👀"
+		}
+		return "チェックをお願いします", "👀"
+	case "RETAKE":
+		if normalizeNotificationLang(lang) == "en" {
+			return "A revision is needed", "🔁"
+		}
+		return "修正をお願いします", "🔁"
+	case "DONE":
+		if normalizeNotificationLang(lang) == "en" {
+			return "Completed. Please check if needed.", "✅"
+		}
+		return "完了しました。必要に応じてご確認ください。", "✅"
+	case "READY":
+		if normalizeNotificationLang(lang) == "en" {
+			return "Ready for the next step", "🟢"
+		}
+		return "次工程の作業準備ができました", "🟢"
+	case "TODO":
+		if normalizeNotificationLang(lang) == "en" {
+			return "A task has been assigned", "📋"
+		}
+		return "タスクがアサインされました", "📋"
+	case "WIP":
+		if normalizeNotificationLang(lang) == "en" {
+			return "Work is now in progress", "🚧"
+		}
+		return "作業を開始しました", "🚧"
+	default:
+		return "", "ℹ️"
+	}
+}
+
+func localizedStatusTransitionMessage(prev, current, lang string) string {
+	if prev == "" || strings.EqualFold(prev, current) {
+		return ""
+	}
+	key := strings.ToUpper(prev) + "->" + strings.ToUpper(current)
+	switch key {
+	case "RETAKE->WFA":
+		if normalizeNotificationLang(lang) == "en" {
+			return "A revised version has been uploaded"
+		}
+		return "修正版がアップされました"
+	case "RETAKE->DONE":
+		if normalizeNotificationLang(lang) == "en" {
+			return "Completed after revision"
+		}
+		return "修正対応が完了しました"
+	case "WFA->RETAKE":
+		if normalizeNotificationLang(lang) == "en" {
+			return "Review requested additional changes"
+		}
+		return "レビューで追加修正が入りました"
+	case "WFA->READY":
+		if normalizeNotificationLang(lang) == "en" {
+			return "Review is complete. Ready for the next step"
+		}
+		return "確認が完了しました。次工程に進めます"
+	case "READY->WIP":
+		if normalizeNotificationLang(lang) == "en" {
+			return "Work has started"
+		}
+		return "作業を開始しました"
+	case "READY->DONE":
+		if normalizeNotificationLang(lang) == "en" {
+			return "Completed without additional work"
+		}
+		return "追加作業なしで完了しました"
+	case "WIP->WFA":
+		if normalizeNotificationLang(lang) == "en" {
+			return "Ready for review"
+		}
+		return "チェック可能な状態になりました"
+	case "WFA->DONE":
+		if normalizeNotificationLang(lang) == "en" {
+			return "Final review is complete"
+		}
+		return "最終確認が完了しました"
+	case "RETAKE->WIP":
+		if normalizeNotificationLang(lang) == "en" {
+			return "Revision work has started"
+		}
+		return "修正作業を開始しました"
+	case "WIP->RETAKE":
+		if normalizeNotificationLang(lang) == "en" {
+			return "A retake was requested"
+		}
+		return "リテイクが入りました"
+	case "TODO->WIP":
+		if normalizeNotificationLang(lang) == "en" {
+			return "Work has started"
+		}
+		return "作業を開始しました"
+	default:
+		return ""
+	}
+}
+
+// statusMessageInfo returns the Japanese message text and emoji for a given status.
+// Returns ("", "📌") for statuses we don't have a tailored message for.
+func statusMessageInfo(status string) (string, string) {
+	switch strings.ToUpper(status) {
+	case "WFA":
+		return "チェックをお願いします", "👀"
+	case "RETAKE":
+		return "修正をお願いします", "🔃"
+	case "DONE":
+		return "承認されました。お疲れ様でした！", "✅"
+	case "READY":
+		return "次工程の作業待ちです", "🟢"
+	case "TODO":
+		return "タスクが作成されました", "📋"
+	case "WIP":
+		return "作業中です", "🔧"
+	default:
+		return "", "📌"
+	}
+}
+
+// statusTransitionMessage は前後のステータス遷移に応じた補足メッセージを返す。
+// 特に対応しない遷移では空文字列を返す。
+func statusTransitionMessage(prev, current string) string {
+	if prev == "" || strings.EqualFold(prev, current) {
+		return ""
+	}
+	key := strings.ToUpper(prev) + "→" + strings.ToUpper(current)
+	switch key {
+	case "RETAKE→WFA":
+		return "📤 修正版がアップされました"
+	case "RETAKE→DONE":
+		return "✅ 承認されました"
+	case "WFA→RETAKE":
+		return "🔃 リテイクお願いします。"
+	case "WFA→READY":
+		return "🟢 承認完了。次工程の作業待ちです"
+	case "READY→WIP":
+		return "🚀 作業を開始しました"
+	case "READY→DONE":
+		return "🎉 作業完了・承認されました"
+	case "WIP→WFA":
+		return "📤 チェック依頼が送られました"
+	case "WFA→DONE":
+		return "🎉 最終承認されました！お疲れ様でした"
+	case "RETAKE→WIP":
+		return "🔧 修正作業を開始しました"
+	case "WIP→RETAKE":
+		return "🔄 リテイクお願いします。"
+	case "TODO→WIP":
+		return "🚀 作業を開始しました"
+	default:
+		return ""
+	}
+}
+
+// 工程ごとのアイコン
+func getProcessEmoji(taskType string) string {
+	switch strings.ToLower(strings.TrimSpace(taskType)) {
+	case "animation", "anim":
+		return "🏃"
+	case "asset", "assets", "background art", "background", "bg", "environment", "env":
+		return "🖼️"
+	case "camera", "matchmove", "tracking":
+		return "🎥"
+	case "color grading", "grading", "color":
+		return "🌈"
+	case "compositing", "comp":
+		return "🧩"
+	case "concept", "concept art":
+		return "💭"
+	case "cleanup", "clean", "paint":
+		return "🖌️"
+	case "design":
+		return "🎨"
+	case "editing", "edit", "offline edit", "online edit":
+		return "✂️"
+	case "fx", "vfx", "simulation", "sim":
+		return "✨"
+	case "lighting":
+		return "💡"
+	case "layout":
+		return "📐"
+	case "lookdev", "look development":
+		return "🔍"
+	case "modeling", "model":
+		return "🧊"
+	case "previs", "previz":
+		return "🎬"
+	case "production", "pm", "coordination":
+		return "📋"
+	case "rendering", "render":
+		return "💻"
+	case "rigging", "rig":
+		return "🦴"
+	case "rotoscoping", "roto":
+		return "✂️"
+	case "script", "writing":
+		return "📜"
+	case "shading":
+		return "🌓"
+	case "sound", "audio", "music":
+		return "🔊"
+	case "storyboard", "board":
+		return "📝"
+	case "texture", "texturing":
+		return "🧵"
+	case "review", "approval":
+		return "👀"
+	case "shot":
+		return "🎞️"
+	case "sequence", "episode":
+		return "📚"
+	default:
+		return "🏷️"
+	}
+}
+
+// DeleteMessage は既存のDiscordメッセージを削除する。
+// threadID が空でない場合はスレッド内メッセージの削除として処理する。
+// 成功時は true、失敗時は false を返す（失敗してもプロセスは継続）
+func DeleteMessage(webhookURL, messageID, threadID string) bool {
+	if webhookURL == "" || messageID == "" {
+		return false
+	}
+	deleteURL := fmt.Sprintf("%s/messages/%s", webhookURL, messageID)
+	if threadID != "" {
+		deleteURL += "?thread_id=" + url.QueryEscape(threadID)
+	}
+	req, err := http.NewRequest(http.MethodDelete, deleteURL, nil)
+	if err != nil {
+		slog.Warn("DeleteMessage: failed to build request", "err", err, "messageID", messageID)
+		return false
+	}
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		slog.Warn("DeleteMessage: request failed", "err", err, "messageID", messageID)
+		return false
+	}
+	defer resp.Body.Close()
+	io.Copy(io.Discard, resp.Body)
+
+	// 204 No Content = 削除成功 / 404 Not Found = すでに削除済み（成功扱い）
+	if resp.StatusCode == http.StatusNoContent || resp.StatusCode == http.StatusNotFound {
+		return true
+	}
+	slog.Warn("DeleteMessage: unexpected status", "status", resp.StatusCode, "messageID", messageID)
+	return false
+}
+
+// sendMessageOnce は HTTP POST を1回試みる内部関数。
+// 戻り値: (result, retryable, err)
+// retryable=true なら呼び出し側がリトライを判断する。
+func sendMessageOnce(body []byte, reqURL string) (respBody []byte, statusCode int, retryAfterSec float64, err error) {
+	client := &http.Client{Timeout: 15 * time.Second}
+	resp, err := client.Post(reqURL, "application/json", bytes.NewBuffer(body))
+	if err != nil {
+		return nil, 0, 0, err
+	}
+	defer resp.Body.Close()
+	respBody, err = ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return nil, resp.StatusCode, 0, err
+	}
+	// 429 Rate Limit: Retry-After ヘッダを秒数として返す
+	if resp.StatusCode == 429 {
+		if ra := resp.Header.Get("Retry-After"); ra != "" {
+			if v, e := strconv.ParseFloat(ra, 64); e == nil {
+				retryAfterSec = v
+			} else {
+				retryAfterSec = 1.0
+			}
+		} else {
+			retryAfterSec = 1.0
+		}
+	}
+	return respBody, resp.StatusCode, retryAfterSec, nil
+}
+
+// SendMessage は1タスク分のメッセージを送信して SendResult を返す。
+// threadID が空で threadName が非空の場合は新規スレッドを作成する。
+// threadID が非空の場合は既存スレッドに返信する。
+// 429 Rate Limit と 5xx エラーは自動リトライ（最大3回）する。
+// 失敗時は空の SendResult を返す。
+func SendMessage(payload Payload, webhookURL, threadID, threadName string) SendResult {
+	// URL 組み立て
+	reqURL := webhookURL + "?wait=true"
+	if threadID != "" {
+		reqURL += "&thread_id=" + url.QueryEscape(threadID)
+	} else if threadName != "" {
+		// スレッド名は最大 100 文字
+		if len([]rune(threadName)) > 100 {
+			runes := []rune(threadName)
+			threadName = string(runes[:100])
+		}
+		reqURL += "&thread_name=" + url.QueryEscape(threadName)
+	}
+
+	body, err := json.Marshal(payload)
+	if err != nil {
+		slog.Error("SendMessage: marshal failed", "err", err)
+		return SendResult{}
+	}
+
+	// リトライループ: 429 Rate Limit と 5xx エラーは最大3回まで再試行
+	const maxRetries = 3
+	var respBody []byte
+	var statusCode int
+	for attempt := 0; attempt <= maxRetries; attempt++ {
+		var retryAfterSec float64
+		respBody, statusCode, retryAfterSec, err = sendMessageOnce(body, reqURL)
+		if err != nil {
+			slog.Error("SendMessage: HTTP post failed", "err", err, "attempt", attempt+1)
+			if attempt < maxRetries {
+				time.Sleep(time.Duration(1<<attempt) * time.Second) // 1s, 2s, 4s
+				continue
+			}
+			return SendResult{}
+		}
+		if statusCode == 429 {
+			// Rate Limited: Retry-After ヘッダの秒数だけ待って再試行。
+			// 上限30秒: Discordが極端に長いretry_afterを返した場合（例: 1600秒超）に
+			// 起動・ポーリングが無期限ブロックされるのを防ぐ。
+			// 上限を超えた場合はこの試行を断念し、次のポーリングサイクルで再試行する。
+			const maxRateLimitWait = 30 * time.Second
+			wait := time.Duration(retryAfterSec*1000) * time.Millisecond
+			if wait < 100*time.Millisecond {
+				wait = 100 * time.Millisecond
+			}
+			if wait > maxRateLimitWait {
+				slog.Warn("SendMessage: rate limit wait exceeds cap; skipping this task until next poll cycle",
+					"retryAfterSec", retryAfterSec, "capSec", maxRateLimitWait.Seconds(), "attempt", attempt+1)
+				return SendResult{}
+			}
+			slog.Warn("SendMessage: rate limited, waiting",
+				"retryAfterSec", retryAfterSec, "attempt", attempt+1)
+			time.Sleep(wait)
+			continue
+		}
+		if statusCode >= 500 && attempt < maxRetries {
+			// サーバーエラー: 指数バックオフで再試行
+			wait := time.Duration(1<<attempt) * time.Second
+			slog.Warn("SendMessage: server error, retrying",
+				"status", statusCode, "attempt", attempt+1, "waitSec", wait.Seconds())
+			time.Sleep(wait)
+			continue
+		}
+		break // 成功 or リトライ不要なエラー
+	}
+
+	if statusCode < 200 || statusCode >= 300 {
+		slog.Error("SendMessage: non-2xx response",
+			"status", statusCode,
+			"body", string(respBody))
+		return SendResult{}
+	}
+
+	var msg DiscordMessage
+	if err := json.Unmarshal(respBody, &msg); err != nil {
+		slog.Error("SendMessage: unmarshal failed", "err", err, "body", string(respBody))
+		return SendResult{}
+	}
+
+	result := SendResult{MessageID: msg.ID}
+	// スレッド新規作成時: channel_id がスレッドID になる
+	if threadName != "" && msg.ChannelID != "" {
+		result.ThreadID = msg.ChannelID
+	} else {
+		result.ThreadID = threadID // 既存スレッドはそのまま引き継ぐ
+	}
+	return result
+}
+
+// SendMessageBunch は各タスクを処理して SendResult のマップを返す
+// キーはタスクID
+func SendMessageBunch(conf config.Config, data []kitsu.MessagePayload, webHookURL string, previousMessageIDs map[string]string, previousWebhookURLs map[string]string, previousThreadIDs map[string]string, projectNotificationLanguages map[string]string, db *gorm.DB) map[string]SendResult {
+	result := make(map[string]SendResult)
 
 	for _, elem := range data {
 		var placeholders Template
+		notifLang := normalizeNotificationLang(projectNotificationLanguages[elem.Project.ID])
 
 		placeholders.ProjectName = elem.Project.Name
-		placeholders.GroupName = elem.EntityType.Name // not needed
+		placeholders.GroupName = elem.EntityType.Name
 		placeholders.ParentName = elem.Parent.Name
 		placeholders.TaskName = elem.Entity.Name
 		placeholders.TaskType = elem.TaskType.Name
 		placeholders.CurrentStatus = elem.TaskStatus.ShortName
+		placeholders.StatusUpper = strings.ToUpper(elem.TaskStatus.ShortName)
 		placeholders.PreviousStatus = elem.PreviousStatusName
 		placeholders.CommentContent = elem.LatestComment.Comment.Text
 		placeholders.CommentAuthor = elem.LatestComment.Author.FullName
 		placeholders.EntityType = elem.EntityType.EntityType.Name
+		placeholders.ProcessEmoji = getProcessEmoji(elem.TaskType.Name)
+		if db != nil {
+			placeholders.ChannelName = model.FindChannelNameByWebhookURL(db, webHookURL)
+		}
 
+		// Assignees を解決しつつ、アーティストの Discord ID も収集。
+		// 同じ Kitsu 名が userMap に複数行で書かれていても 1 回しか mention しないよう、
+		// 既に追加した DiscordID を seen で重複排除する。
+		var assigneeNames []string
+		var artistMentions []string
+		seenDiscordID := make(map[string]bool)
 		placeholders.Assignees = make([]Assignee, len(elem.Assignees))
 		for i := 0; i < len(elem.Assignees); i++ {
-			placeholders.Assignees[i].Fullname = elem.Assignees[i].FullName
+			fullName := elem.Assignees[i].FullName
+			placeholders.Assignees[i].Fullname = fullName
 			placeholders.Assignees[i].Email = elem.Assignees[i].Email
-			placeholders.Assignees[i].Phone = elem.Assignees[i].Phone
+			assigneeNames = append(assigneeNames, fullName)
+
+			matched := false
+			// DB 優先: UserMapResolver が注入されていれば使う（プロジェクトスコープ → グローバル フォールバック対応）
+			if UserMapResolver != nil {
+				assigneeEmail := elem.Assignees[i].Email
+				if did := UserMapResolver(elem.Project.ID, fullName, assigneeEmail); did != "" {
+					if !seenDiscordID[did] {
+						artistMentions = append(artistMentions, "<@"+did+">")
+						seenDiscordID[did] = true
+					}
+					matched = true
+				}
+			}
+			// フォールバック: conf.toml の userMap
+			if !matched {
+				for _, u := range conf.Mention.UserMap {
+					if u.KitsuName == fullName {
+						if !seenDiscordID[u.DiscordID] {
+							artistMentions = append(artistMentions, "<@"+u.DiscordID+">")
+							seenDiscordID[u.DiscordID] = true
+						}
+						matched = true
+						break
+					}
+				}
+			}
+			if !matched {
+				slog.Warn("Kitsu user not registered; will not be @-mentioned",
+					"kitsuName", fullName,
+					"taskID", elem.Task.ID,
+					"hint", "add this person via /bot/admin/users")
+			}
+		}
+		if len(assigneeNames) > 0 {
+			placeholders.AssigneesStr = strings.Join(assigneeNames, ", ")
+		} else {
+			placeholders.AssigneesStr = "未割り当て"
 		}
 
+		// タスクタイプからチェッカーの Discord ID 一覧を検索（DB 優先、複数人対応）
+		var checkerMentionList []string
+		if CheckerResolver != nil {
+			if dids := CheckerResolver(elem.Project.ID, elem.TaskType.Name); len(dids) > 0 {
+				for _, did := range dids {
+					checkerMentionList = append(checkerMentionList, "<@"+did+">")
+				}
+			}
+		}
+		if len(checkerMentionList) == 0 {
+			for _, c := range conf.Mention.Checkers {
+				if strings.EqualFold(c.TaskType, elem.TaskType.Name) {
+					checkerMentionList = append(checkerMentionList, "<@"+c.DiscordID+">")
+				}
+			}
+		}
+		checkerMention := strings.Join(checkerMentionList, " ")
+
+		// ステータスごとのメンション対象を conf.Mention の設定から決める。
+		// CheckerStatuses に含まれるステータスではチェッカーをメンション、
+		// ArtistStatuses に含まれるステータスではアーティスト全員をメンションする。
+		// HereStatuses に含まれるステータスでは @here を追加（緊急通知）。
+		// 複数に含まれるステータスでは全てを併記する。
+		currentStatus := strings.ToUpper(elem.TaskStatus.ShortName)
+		var mentionParts []string
+		if containsIgnoreCase(conf.Mention.CheckerStatuses, currentStatus) {
+			if checkerMention != "" {
+				mentionParts = append(mentionParts, checkerMention)
+			} else if len(conf.Mention.Checkers) > 0 {
+				slog.Warn("No checker configured for task type; checker will not be @-mentioned",
+					"taskType", elem.TaskType.Name,
+					"status", currentStatus,
+					"taskID", elem.Task.ID,
+					"hint", "add this task type to [[mention.checkers]] in conf.toml")
+			}
+		}
+		if containsIgnoreCase(conf.Mention.ArtistStatuses, currentStatus) {
+			if artistJoined := strings.Join(artistMentions, " "); artistJoined != "" {
+				mentionParts = append(mentionParts, artistJoined)
+			}
+		}
+		// 緊急ステータスは @here でチャンネル全員に通知
+		if containsIgnoreCase(conf.Mention.HereStatuses, currentStatus) {
+			mentionParts = append(mentionParts, "@here")
+		}
+		mentionContent := strings.Join(mentionParts, " ")
+		statusMessage, statusEmoji := localizedStatusMessageInfo(currentStatus, notifLang)
+
+		placeholders.MentionContent = mentionContent
+		placeholders.StatusMessage = statusMessage
+		placeholders.StatusEmoji = statusEmoji
+		// ストレージ URL はプロジェクト別 DB 優先、なければ conf.toml のグローバル値
+		if GoogleDriveURLResolver != nil {
+			if u := GoogleDriveURLResolver(elem.Project.Project.ID); u != "" {
+				placeholders.GoogleDriveURL = u
+			} else {
+				placeholders.GoogleDriveURL = conf.GoogleDrive.URL
+			}
+		} else {
+			placeholders.GoogleDriveURL = conf.GoogleDrive.URL
+		}
+		placeholders.IsCommentOnly = elem.IsCommentOnly
+		placeholders.IsAssignNotification = elem.IsAssignNotification
+		placeholders.StatusTransitionMessage = localizedStatusTransitionMessage(elem.PreviousStatusName, elem.TaskStatus.ShortName, notifLang)
+
+		// TaskURL を組み立て
+		category := "assets"
+		lowEntityType := strings.ToLower(placeholders.EntityType)
+		if strings.Contains(lowEntityType, "shot") || strings.Contains(lowEntityType, "sequence") || strings.Contains(lowEntityType, "episode") {
+			category = "shots"
+		}
+		host := conf.Kitsu.Hostname
+		if !strings.HasSuffix(host, "/") {
+			host += "/"
+		}
+		// ショット一覧 or アセット一覧に飛ぶ
+		placeholders.TaskURL = fmt.Sprintf("%sproductions/%s/%s", host, elem.Project.ID, category)
+
+		// Kitsu プレビュー画像 URL を組み立て
+		// Entity.PreviewFileID は interface{} なので string にキャストする
+		// パス: /api/pictures/thumbnails/preview-files/{id}.png
+		// nginx で認証バイパス設定が必要（README 参照）
+		if id, ok := elem.Entity.Entity.PreviewFileID.(string); ok && id != "" {
+			placeholders.PreviewImageURL = fmt.Sprintf("%sapi/pictures/thumbnails/preview-files/%s.png", host, id)
+		}
+
+		// カラーコードを変換（ステータスカラー → フォールバック用）
 		hexColor := strings.ReplaceAll(elem.TaskStatus.Color, "#", "")
-		intColor, err := strconv.ParseInt(hexColor, 16, 64)
-		if err != nil {
-			fmt.Printf("Conversion failed: %s\n", err)
-		}
+		intColor, _ := strconv.ParseInt(hexColor, 16, 64)
 
-		// Title template
-		tplPreset := conf.TplPreset
+		// テンプレートを展開
+		tplPreset := localizedTemplatePreset(conf.TplPreset, notifLang)
 		author := parseTaskTemplate("tpl/"+tplPreset+"/author.tpl", placeholders)
 		title := parseTaskTemplate("tpl/"+tplPreset+"/title.tpl", placeholders)
 		description := parseTaskTemplate("tpl/"+tplPreset+"/description.tpl", placeholders)
@@ -104,54 +688,80 @@ func SendMessageBunch(conf config.Config, data []kitsu.MessagePayload, webHookUR
 		embed := Embed{}
 		embed.Title = truncate.TruncateString(title, 256)
 		embed.Description = truncate.TruncateString(description, 4096)
-		embed.Color = int(intColor)
+
+		embed.Color = int(intColor) // 常にステータスカラーを使用
 		embed.Author.Name = truncate.TruncateString(author, 256)
-
-		// Kitsu complex (and extremely long) url paths don't fit to Discord limits
-		// Kitsu has different url schemes for short production and tv shows
-		/*
-			// Form URL with appropriate filtering
-
-				url := "assets"
-				args := elem.EntityType.EntityType.Name + "%20" + strings.Replace(elem.Entity.Name, "_", "%20", -1)
-				if elem.EntityType.Name == "Shot" {
-					url = "shots"
-					args = elem.Parent.Name + "%20" + strings.Replace(elem.Entity.Name, "_", "%20", -1)
-				}
-				embed.Url = truncate.TruncateString(conf.Kitsu.Hostname+"productions/"+elem.Project.ID+"/"+url+"/task-types/"+elem.Task.TaskTypeID+"?search="+args, 150)
-		*/
-
-		// Not working for multiple embeds (wtf?)
-		//path := truncate.TruncateString(conf.Kitsu.Hostname+"productions/"+elem.Project.ID+"/news-feed", 128)
-		//embed.Url = path
-
 		embed.Footer.Text = truncate.TruncateString(footer, 2048)
+		embed.Url = truncate.TruncateString(placeholders.TaskURL, 2000)
 
-		payload.Embeds = append(payload.Embeds, embed)
-	}
-	resp := request.Do("", http.MethodPost, webHookURL, payload, nil)
-
-	if conf.Log {
-		if len(resp) > 0 {
-			slog.Info("Discord error response: " + resp)
+		// プレビュー画像がある場合は embed に添付
+		if placeholders.PreviewImageURL != "" {
+			embed.Image = &EmbedImage{URL: placeholders.PreviewImageURL}
 		}
+
+		fieldsRaw := parseTaskTemplate("tpl/"+tplPreset+"/fields.tpl", placeholders)
+		if strings.TrimSpace(fieldsRaw) != "" {
+			var parsedFields []EmbedField
+			err := json.Unmarshal([]byte(fieldsRaw), &parsedFields)
+			if err == nil {
+				embed.Fields = parsedFields
+			}
+		}
+
+		// payload を作成
+		payload := Payload{}
+		if mentionContent != "" {
+			payload.Content = mentionContent
+		}
+		payload.Embeds = []Embed{embed}
+
+		// スレッドモード: 既存スレッドに返信 or 新規スレッドを作成
+		prevThreadID := previousThreadIDs[elem.Task.ID]
+		threadName := ""
+		if conf.Discord.UseThreads && prevThreadID == "" {
+			// 初回のみスレッド名を生成（スレッド作成）
+			threadName = fmt.Sprintf("%s %s/%s - %s",
+				placeholders.ProcessEmoji,
+				placeholders.ParentName,
+				placeholders.TaskName,
+				placeholders.TaskType)
+		}
+
+		// まず新規メッセージを送信。送信成功時のみ旧メッセージを削除する
+		// （順序が逆だと、新規送信失敗時に Discord 上の履歴が消失する）
+		newResult := SendMessage(payload, webHookURL, prevThreadID, threadName)
+		if newResult.MessageID == "" {
+			slog.Warn("SendMessage failed; clearing stale message ID to prevent orphan on next poll",
+				"taskID", elem.Task.ID)
+			// 古いメッセージIDを残すと次回ポーリング時に削除試行→重複発生するためクリア
+			model.ClearMessageID(db, elem.Task.ID)
+			continue
+		}
+
+		// 送信成功 → 旧メッセージを削除
+		// スレッドモード時はスレッド内の古いメッセージだけ消す（スレッド自体は残す）
+		if prevMsgID, ok := previousMessageIDs[elem.Task.ID]; ok && prevMsgID != "" {
+			prevWebhook := previousWebhookURLs[elem.Task.ID]
+			if prevWebhook == "" {
+				prevWebhook = webHookURL
+			}
+			DeleteMessage(prevWebhook, prevMsgID, prevThreadID)
+		}
+
+		result[elem.Task.ID] = newResult
 	}
+
+	return result
 }
 
 func parseTaskTemplate(tplFilePath string, data Template) string {
 	tpl, err := ioutil.ReadFile(tplFilePath)
 	if err != nil {
-		fmt.Print(err)
+		return ""
 	}
-
-	// Create a new template and parse template file
 	t := template.Must(template.New("template").Parse(string(tpl)))
-
 	output := new(bytes.Buffer)
 	t.Execute(output, data)
-	if err != nil {
-		log.Println("executing template:", err)
-	}
-
-	return output.String()
+	return strings.TrimSpace(output.String())
 }
+
