@@ -2,10 +2,10 @@ window.ERDiagram = () => (
     <section className="doc" id="er-diagram">
         <div className="kicker">Database</div>
         <h1 className="docnum"><span className="n">02</span>DB Schema (ER Diagram)</h1>
-        <h2 className="docsub">SQLite ????????????????????????</h2>
+        <h2 className="docsub">SQLite tables and stored operational state</h2>
         <p className="doc-intro">
-            ?????? GORM ??????????????????<code>sqlite.db</code> ????????????????????????????????????
-            Secret ? DB ??????????????
+            These tables are managed through GORM and stored in <code>sqlite.db</code>, where routing, setup, and audit-related application state is persisted.
+            Secrets should stay out of the database unless a routing feature explicitly requires a stored value.
         </p>
 
         <div style={{display:'flex',flexWrap:'wrap',gap:'20px',marginBottom:'32px'}}>
@@ -18,7 +18,7 @@ window.ERDiagram = () => (
                 <div className="row"><span>comment_id</span><span>string</span></div>
                 <div className="row"><span>comment_updated_at</span><span>string</span></div>
                 <div className="row"><span>discord_message_id</span><span>string</span></div>
-                <div className="row"><span>webhook_url</span><span>legacy / ???</span></div>
+                <div className="row"><span>webhook_url</span><span>legacy / optional</span></div>
                 <div className="row"><span>discord_thread_id</span><span>string</span></div>
             </div>
 
@@ -59,18 +59,18 @@ window.ERDiagram = () => (
 
         <div className="variant-label">
             <span className="v">State</span>
-            <h3>??????????????</h3>
+            <h3>Where operational values live</h3>
         </div>
         <div className="wf box">
             <table className="adm">
-                <thead><tr><th>??</th><th>????</th><th>??</th></tr></thead>
+                <thead><tr><th>Value</th><th>Storage</th><th>Notes</th></tr></thead>
                 <tbody>
-                    <tr><td>Kitsu hostname / email</td><td>????</td><td>?? UI ????????? seed ????</td></tr>
-                    <tr><td>Kitsu password</td><td>?????</td><td>Secret ? DB ???????????????????</td></tr>
-                    <tr><td>Discord bot token</td><td>?????</td><td>??????????????????????????</td></tr>
-                    <tr><td>Main webhook URL</td><td>?????</td><td>??????? secret ??? DB ????????</td></tr>
-                    <tr><td>Project webhook URL</td><td>????</td><td>????????????????? docs ???? URL ???????</td></tr>
-                    <tr><td>Task ?????? URL</td><td>?????</td><td>?????? Message ID ?????????legacy ????????</td></tr>
+                    <tr><td>Kitsu hostname / email</td><td>settings DB</td><td>Seeded from admin UI or config seed.</td></tr>
+                    <tr><td>Kitsu password</td><td>env only</td><td>Secret is kept out of the DB and loaded from runtime env.</td></tr>
+                    <tr><td>Discord bot token</td><td>env only</td><td>Loaded at runtime and intentionally hidden in admin surfaces.</td></tr>
+                    <tr><td>Main webhook URL</td><td>env only</td><td>Fallback secret stays outside DB state.</td></tr>
+                    <tr><td>Project webhook URL</td><td>DB</td><td>Per-project routing stores webhook URLs, so docs should always mask values.</td></tr>
+                    <tr><td>Task legacy webhook URL</td><td>DB/legacy</td><td>Kept for older message-linking flows and legacy compatibility.</td></tr>
                 </tbody>
             </table>
         </div>
