@@ -69,21 +69,21 @@ type PollerStatusInfo struct {
 
 // ProjectStatusInfo describes configured project state in the DB.
 type ProjectStatusInfo struct {
-	Selected    bool   `json:"selected"`
-	ProjectID   string `json:"project_id,omitempty"`
-	ProjectName string `json:"project_name,omitempty"`
-	Template    string `json:"template,omitempty"`
-	ChannelCount int   `json:"channel_count"`
-	WebhookCount int   `json:"webhook_count"`
+	Selected     bool   `json:"selected"`
+	ProjectID    string `json:"project_id,omitempty"`
+	ProjectName  string `json:"project_name,omitempty"`
+	Template     string `json:"template,omitempty"`
+	ChannelCount int    `json:"channel_count"`
+	WebhookCount int    `json:"webhook_count"`
 }
 
 type ProjectGuildHealth struct {
-	ProjectID      string `json:"project_id"`
-	ProjectName    string `json:"project_name"`
-	GuildID        string `json:"guild_id,omitempty"`
-	GuildValid     bool   `json:"guild_valid"`
-	PermissionValid bool  `json:"permission_valid"`
-	WebhookHealth  string `json:"webhook_health"`
+	ProjectID       string `json:"project_id"`
+	ProjectName     string `json:"project_name"`
+	GuildID         string `json:"guild_id,omitempty"`
+	GuildValid      bool   `json:"guild_valid"`
+	PermissionValid bool   `json:"permission_valid"`
+	WebhookHealth   string `json:"webhook_health"`
 }
 
 // SetupProjectItem is one entry in the GET /api/setup/projects response.
@@ -134,17 +134,17 @@ type PreviewProjectChannel struct {
 }
 
 type PreviewProjectResponse struct {
-	OK                bool                  `json:"ok"`
-	ProjectID         string                `json:"project_id"`
-	ProjectName       string                `json:"project_name,omitempty"`
-	DiscordServerName string                `json:"discord_server_name,omitempty"`
-	GuildID           string                `json:"guild_id,omitempty"`
-	CategoryName      string                `json:"category_name,omitempty"`
+	OK                bool                    `json:"ok"`
+	ProjectID         string                  `json:"project_id"`
+	ProjectName       string                  `json:"project_name,omitempty"`
+	DiscordServerName string                  `json:"discord_server_name,omitempty"`
+	GuildID           string                  `json:"guild_id,omitempty"`
+	CategoryName      string                  `json:"category_name,omitempty"`
 	ChannelsToCreate  []PreviewProjectChannel `json:"channels_to_create,omitempty"`
 	ChannelsToReuse   []PreviewProjectChannel `json:"channels_to_reuse,omitempty"`
-	WebhooksToCreate  int                   `json:"webhooks_to_create"`
-	Warnings          []string              `json:"warnings,omitempty"`
-	Error             *string               `json:"error,omitempty"`
+	WebhooksToCreate  int                     `json:"webhooks_to_create"`
+	Warnings          []string                `json:"warnings,omitempty"`
+	Error             *string                 `json:"error,omitempty"`
 }
 
 // TestKitsuRequest is the request body for POST /api/setup/test-kitsu.
@@ -579,9 +579,6 @@ func TestDiscordHandler(db *gorm.DB) http.HandlerFunc {
 		}
 
 		info := checkDiscordStatus(botToken, guildID)
-		os.Setenv("DISCORD_BOT_TOKEN", botToken)
-		os.Setenv("DISCORD_GUILD_ID", guildID)
-		model.SetSetting(db, "discord.guildID", guildID)
 		json.NewEncoder(w).Encode(TestDiscordResponse{
 			BotValid:    info.BotValid,
 			BotName:     info.BotName,
@@ -852,13 +849,13 @@ func tryKitsuLogin(hostname, email, password string) (bool, string) {
 
 // MappingStateResponse is the response body for GET /api/setup/mapping.
 type MappingStateResponse struct {
-	ProjectRowID uint                    `json:"project_row_id"`
-	ProjectID    string                  `json:"project_id"`
-	ProjectName  string                  `json:"project_name"`
-	Persons      []MappingPerson         `json:"persons"`
-	TaskTypes    []string                `json:"task_types"`
-	UserMaps     []MappingUserEntry      `json:"user_maps"`
-	CheckerMaps  []MappingCheckerEntry   `json:"checker_maps"`
+	ProjectRowID uint                  `json:"project_row_id"`
+	ProjectID    string                `json:"project_id"`
+	ProjectName  string                `json:"project_name"`
+	Persons      []MappingPerson       `json:"persons"`
+	TaskTypes    []string              `json:"task_types"`
+	UserMaps     []MappingUserEntry    `json:"user_maps"`
+	CheckerMaps  []MappingCheckerEntry `json:"checker_maps"`
 }
 
 // MappingPerson is a Kitsu person with their current Discord mapping status.

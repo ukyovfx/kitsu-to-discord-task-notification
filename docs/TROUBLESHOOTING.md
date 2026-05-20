@@ -146,6 +146,14 @@ The bot is not in the server, or the Guild ID is wrong.
 1. Confirm the Guild ID via Discord Developer Mode (right-click server → Copy Server ID).
 2. If the bot is not yet in the server, generate a new invite URL from Discord Developer Portal → OAuth2 → URL Generator (scope: `bot`, permissions: Manage Channels + Manage Webhooks).
 
+### Step 2 note: test action vs saved settings
+
+- /api/setup/test-discord only validates the submitted token/guild pair and does not save token or guild settings.
+- Entering a token in /bot/admin/bot updates only the current running process and is not written to .env.local.
+- After restart, DISCORD_BOT_TOKEN is reloaded from .env.local / environment variables.
+- If you rotate the token, update .env.local (or your deployment environment) before restart.
+- Guild ID entered in admin settings is stored as a normal setting (discord.guildID) and persists across restart.
+
 ### Step 3 (Project) shows "FAIL:" lines
 
 KitsuSync attempts rollback automatically, but rollback is best-effort. Read the `FAIL:` line carefully:

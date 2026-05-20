@@ -867,8 +867,8 @@ func BotHandler(db *gorm.DB, kitsuReconnect func()) http.HandlerFunc {
   <form method="POST" class="section-stack">
     <div class="section-card glass"><h3>%s</h3><div class="form-grid">
       <div class="form-span-2"><label>Kitsu hostname</label><input type="text" value="%s" readonly></div>
-      <div><label>Discord Bot Token</label><input type="password" name="bot_token" autocomplete="new-password" placeholder="%s"></div>
-      <div><label>%s</label><input type="text" name="guild_id" value="%s" placeholder="123456789012345678"></div>
+      <div><label>Discord Bot Token</label><input type="password" name="bot_token" autocomplete="new-password" placeholder="%s"><p class="field-help">%s</p><p class="field-help">%s</p></div>
+      <div><label>%s</label><input type="text" name="guild_id" value="%s" placeholder="123456789012345678"><p class="field-help">%s</p></div>
     </div></div>
     <div class="section-card glass"><h3>%s</h3><div class="form-grid">
       <div><label>%s</label><input type="email" name="kitsu_runtime_email" value="%s" placeholder="kitsusync-bot@local.invalid"></div>
@@ -877,7 +877,7 @@ func BotHandler(db *gorm.DB, kitsuReconnect func()) http.HandlerFunc {
     <div class="button-row"><button type="submit" class="btn">%s</button><a class="btn-ghost" href="%s">%s</a></div>
   </form>
 </div>`,
-			authNoticeHTML(lang, t(lang, "再認証済み", "Re-authenticated"), t(lang, "編集モードは一時的に有効です。", "Edit mode is temporarily enabled.")), t(lang, "Discord 設定", "Discord settings"), esc(effectiveHost), t(lang, "必要な時だけ新しい Token を入力してください。", "Only paste a new token when rotating it."), t(lang, "サーバーID", "Server ID"), esc(guildID), t(lang, "Kitsu Runtime 接続", "Kitsu runtime connection"), t(lang, "Runtime メール", "Runtime email"), esc(kitsuEmail), t(lang, "Runtime パスワード", "Runtime password"), t(lang, "必要な時だけ専用 Runtime パスワードを入力してください。", "Only paste a new dedicated runtime password when rotating it."), t(lang, "保存", "Save"), withLang("/bot/admin/bot", r), t(lang, "キャンセル", "Cancel"))
+				authNoticeHTML(lang, t(lang, "再認証済み", "Re-authenticated"), t(lang, "編集モードは一時的に有効です。", "Edit mode is temporarily enabled.")), t(lang, "Discord 設定", "Discord settings"), esc(effectiveHost), t(lang, "必要な時だけ新しい Token を入力してください。", "Only paste a new token when rotating it."), t(lang, "このトークン変更は現在実行中のプロセスにのみ反映されます。", "Token changes apply only to the currently running process."), t(lang, "再起動時は .env.local / 環境変数の値が再読み込みされます。永続ローテーションは .env.local も更新してください。", "On restart, the token is reloaded from .env.local / environment. Update .env.local for durable rotation."), t(lang, "サーバーID", "Server ID"), esc(guildID), t(lang, "Guild ID は通常設定として保存され、再起動後も維持されます。", "Guild ID is saved as a regular setting and persists across restart."), t(lang, "Kitsu Runtime 接続", "Kitsu runtime connection"), t(lang, "Runtime メール", "Runtime email"), esc(kitsuEmail), t(lang, "Runtime パスワード", "Runtime password"), t(lang, "必要な時だけ専用 Runtime パスワードを入力してください。", "Only paste a new dedicated runtime password when rotating it."), t(lang, "保存", "Save"), withLang("/bot/admin/bot", r), t(lang, "キャンセル", "Cancel"))
 		fmt.Fprint(w, adminPage(lang, t(lang, "Bot設定", "Bot Settings"), r, edit))
 	}
 }
