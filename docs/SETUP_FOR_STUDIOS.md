@@ -48,8 +48,8 @@ Note your **Discord Guild IDs** (Server IDs) for each production server:
 ### On the server
 
 ```bash
-git clone https://github.com/YOUR_ORG/kitsusync.git
-cd kitsusync
+git clone https://github.com/ukyovfx/kitsu-to-discord-task-notification.git
+cd kitsu-to-discord-task-notification
 
 # Copy and fill in the config files
 cp .env.example .env.local
