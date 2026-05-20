@@ -1,18 +1,22 @@
 # Setup Wizard Reference
 
-The Setup Wizard (`/bot/setup-wizard`) is the **recommended first-run entry point** for v0.1.0. It guides you through the complete first-time configuration in 4 steps. This document covers each step in detail, including common errors and how to fix them.
+The Setup Wizard (`/bot/setup-wizard`) is the **Guided Setup** path for v0.1.0. Admin-first setup is also available through `/bot/admin/setup`, which shows the same diagnostics in a manual checklist view. Both paths end at the same rule: one project, one guild, and one successful test notification.
 
 If you are starting from a clean clone, the intended operator path is:
 
 1. Start the app with `.env.local` and `conf.toml`
 2. Open `/bot/login`
 3. Sign in with a personal Kitsu manager/admin account
-4. Continue into `/bot/setup-wizard`
-5. Use `/bot/setup` and `/bot/admin/*` only after the wizard finishes
+4. Open `/bot/admin/setup` to review the common diagnostics
+5. Set shared bot credentials in `/bot/admin/bot`
+6. Assign `project -> guild` in `/bot/admin/projects`
+7. Continue into `/bot/setup-wizard` if needed
 
 ---
 
 ## Overview
+
+The current implementation uses the new guided/manual diagnostics model. The legacy 4-step table below is kept as a reference, but the active setup flow now centers on env, Kitsu, Discord, project->guild, and test notification checks.
 
 | Step | Name | Required | What it configures |
 |------|------|----------|--------------------|
@@ -88,7 +92,7 @@ The wizard pre-populates steps from the current system state. If Kitsu and Disco
 
 ## Step 3: Project Setup
 
-**What it does:** Creates a Discord category, text channels, and webhooks for one Kitsu project using the `cg` template.
+**What it does:** Previews the Discord category, text channels, and webhooks for one Kitsu project, then creates them only after confirmation and finishes with one test notification.
 
 **Inputs:**
 
@@ -97,7 +101,9 @@ The wizard pre-populates steps from the current system state. If Kitsu and Disco
 | Project | List loaded from Kitsu | Projects already configured show as "configured" |
 | Notification language | Japanese / English | Controls channel names; can be changed per-project |
 
-**Creating channels** calls `POST /api/setup/apply-project`. The API:
+**Preview Setup** calls `POST /api/setup/preview-project`. This endpoint is read-only and returns the resolved Discord Server, category name, channel plan, webhook count, and any warnings.
+
+**Confirm and Create** then calls `POST /api/setup/apply-project`. The API:
 1. Resolves the project name from Kitsu
 2. Creates a Discord category named after the project
 3. Creates text channels for each task type defined in the template
@@ -106,7 +112,7 @@ The wizard pre-populates steps from the current system state. If Kitsu and Disco
 
 Each step is atomic — if any channel creation fails, the entire setup is rolled back automatically. You can re-run setup after fixing the issue.
 
-**On success:** Shows channel count and webhook count, then advances to Step 4.
+**On success:** Shows channel count and webhook count, then unlocks a test notification action inside Step 3. Step 3 is only complete after the test notification succeeds.
 
 ### Step 3 errors
 

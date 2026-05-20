@@ -67,10 +67,10 @@ func TestSetupStatusHandlerSmoke(t *testing.T) {
 func TestBuildProjectStatusAggregatesChannelsAndWebhooks(t *testing.T) {
 	db := newTestDB(t)
 
-	if err := model.CreateProject(db, "p1", "Project One", "cg", "cat-1", "ja"); err != nil {
+	if err := model.CreateProject(db, "p1", "Project One", "cg", "g-1", "cat-1", "ja"); err != nil {
 		t.Fatalf("create project: %v", err)
 	}
-	if err := model.CreateProject(db, "p2", "Project Two", "cg", "cat-2", "en"); err != nil {
+	if err := model.CreateProject(db, "p2", "Project Two", "cg", "g-2", "cat-2", "en"); err != nil {
 		t.Fatalf("create project: %v", err)
 	}
 	for _, row := range []struct {

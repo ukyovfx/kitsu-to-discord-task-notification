@@ -36,7 +36,7 @@ KitsuSync needs a dedicated Kitsu account to poll for changes. This should be a 
 7. Select permissions: `Manage Channels`, `Manage Webhooks`
 8. Copy the generated URL and open it in a browser to add the bot to your server.
 
-Note your **Discord Guild ID** (Server ID):
+Note your **Discord Guild IDs** (Server IDs) for each production server:
 
 - In Discord, go to Settings → Advanced → enable Developer Mode.
 - Right-click your server name → Copy Server ID.
@@ -67,7 +67,7 @@ KITSU_RUNTIME_EMAIL=bot@yourstudio.com      # The runtime account you created in
 KITSU_RUNTIME_PASSWORD=yourpassword
 
 DISCORD_BOT_TOKEN=your-bot-token            # From Discord Developer Portal (Part 2)
-DISCORD_GUILD_ID=your-server-id            # From Discord Developer Mode (Part 2)
+DISCORD_GUILD_ID=optional-fallback-server-id  # Optional fallback only
 
 DISCORD_WEBHOOK_URL=                        # Leave blank for now; set up via /bot/setup
 ```
@@ -122,7 +122,7 @@ Sign in with your **personal** Kitsu manager or admin account. This is not the r
 
 Sessions expire after 15 minutes.
 
-### Step 2: Bot Setup (`/bot/setup` → Bot Setup)
+### Step 2: Bot Setup (`/bot/admin/bot`)
 
 This step verifies that the bot token and guild ID are working.
 
@@ -130,7 +130,11 @@ This step verifies that the bot token and guild ID are working.
 2. Click **Bot Setup** (or the equivalent button in your language).
 3. If successful, you'll see the bot username and server name confirmed.
 
-### Step 3: Project Setup (`/bot/setup` → Project Setup)
+### Step 3: Assign Guild per Project (`/bot/admin/projects`)
+
+For each Kitsu project, set the Discord Guild ID where channels should be created.
+
+### Step 4: Project Setup (`/bot/setup` → Project Setup)
 
 This creates Discord channels and webhooks for one Kitsu project.
 
@@ -145,7 +149,7 @@ This creates Discord channels and webhooks for one Kitsu project.
 If setup succeeds, you'll see channel names confirmed in the output.
 If setup fails partway through, read the `FAIL:` / `WARN:` lines in the output — partial changes are rolled back automatically.
 
-### Step 4: Review Routing (`/bot/admin`)
+### Step 5: Review Routing (`/bot/admin`)
 
 After project setup, open `/bot/admin` to verify:
 

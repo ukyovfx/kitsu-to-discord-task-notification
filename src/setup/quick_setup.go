@@ -136,7 +136,10 @@ func RenderQuickSetupPage(db *gorm.DB, refreshCreds func() (kitsuHost, botToken,
 		summaryText = t(lang, "セットアップ完了 — KitsuSync は稼働中です", "Setup complete — KitsuSync is running")
 	} else {
 		summaryClass = "warn"
-		summaryText = fmt.Sprintf(t(lang, "あと %d 項目", "%d item(s) remaining"), len(reasons))
+		summaryText = fmt.Sprintf(
+			t(lang, "あと %d 項目 — 各カードの Fix を確認し、Guided Setup で順を追って進めると確実です。", "%d item(s) remaining — check each card's Fix hint, or use Guided Setup to walk through step by step."),
+			len(reasons),
+		)
 	}
 
 	var envCards strings.Builder
@@ -169,6 +172,7 @@ func RenderQuickSetupPage(db *gorm.DB, refreshCreds func() (kitsuHost, botToken,
     <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
       <a class="btn-ghost" style="font-size:.82rem;padding:5px 12px" href="%s">%s</a>
       <a class="btn-ghost" style="font-size:.82rem;padding:5px 12px" href="%s">%s</a>
+      <a class="btn" style="font-size:.82rem;padding:5px 14px" href="%s">%s</a>
     </div>
   </div>
 </div>
@@ -195,6 +199,8 @@ func RenderQuickSetupPage(db *gorm.DB, refreshCreds func() (kitsuHost, botToken,
 		html.EscapeString(t(lang, "← Entry", "← Entry")),
 		withLang("/bot/admin/setup", r),
 		html.EscapeString(t(lang, "Manual Setup →", "Manual Setup →")),
+		withLang("/bot/setup-wizard?mode=guided", r),
+		html.EscapeString(t(lang, "Guided Setup →", "Guided Setup →")),
 		summaryClass,
 		html.EscapeString(summaryText),
 		html.EscapeString(t(lang, "環境変数", "Environment Variables")),

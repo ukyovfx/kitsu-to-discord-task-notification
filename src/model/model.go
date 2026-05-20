@@ -11,7 +11,9 @@ type AuditLog struct {
 	ID                 uint      `gorm:"primaryKey"`
 	CreatedAt          time.Time `gorm:"index"`
 	TaskID             string    `gorm:"index"`
+	ProjectID          string    `gorm:"index"`
 	ProjectName        string
+	GuildID            string `gorm:"index"`
 	EntityName         string
 	TaskType           string
 	OldStatus          string
@@ -129,6 +131,7 @@ type Project struct {
 	KitsuProjectID    string `gorm:"uniqueIndex"`
 	Name              string
 	ProjectType       string
+	DiscordGuildID    string `gorm:"index"`
 	DiscordCategoryID string
 	Language          string
 	StorageURL        string
@@ -143,14 +146,38 @@ type ProjectWebhook struct {
 	DiscordChannelID string
 }
 
-func CreateProject(db *gorm.DB, kitsuProjectID, name, projectType, categoryID, language string) error {
+func CreateProject(db *gorm.DB, kitsuProjectID, name, projectType, guildID, categoryID, language string) error {
 	return db.Create(&Project{
 		KitsuProjectID:    kitsuProjectID,
 		Name:              name,
 		ProjectType:       projectType,
+		DiscordGuildID:    guildID,
 		DiscordCategoryID: categoryID,
 		Language:          language,
 	}).Error
+}
+
+func UpdateProjectGuildID(db *gorm.DB, kitsuProjectID, guildID string) error {
+	return db.Model(&Project{}).Where("kitsu_project_id = ?", kitsuProjectID).Update("discord_guild_id", guildID).Error
+}
+
+func ResolveProjectGuildID(db *gorm.DB, kitsuProjectID, fallbackGuildID string) string {
+	if p := FindProjectByKitsuID(db, kitsuProjectID); p != nil && strings.TrimSpace(p.DiscordGuildID) != "" {
+		return strings.TrimSpace(p.DiscordGuildID)
+	}
+	return strings.TrimSpace(fallbackGuildID)
+}
+
+// SeedProjectGuildFallback copies legacy global guild ID into existing projects
+// that do not have project-scoped guild IDs yet.
+func SeedProjectGuildFallback(db *gorm.DB, fallbackGuildID string) {
+	fallbackGuildID = strings.TrimSpace(fallbackGuildID)
+	if fallbackGuildID == "" || db == nil {
+		return
+	}
+	_ = db.Model(&Project{}).
+		Where("discord_guild_id = '' OR discord_guild_id IS NULL").
+		Update("discord_guild_id", fallbackGuildID).Error
 }
 
 func FindProjectByKitsuID(db *gorm.DB, kitsuProjectID string) *Project {

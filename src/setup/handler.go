@@ -70,8 +70,16 @@ func cleanupSetupArtifacts(kitsuProjectID, categoryID, botToken string, channels
 	res.ok("rolled back setup records")
 }
 
-func RunProjectSetup(kitsuProjectID, projectName, projectType, language, kitsuHost, guildID, botToken string, db *gorm.DB) (res SetupResult) {
+func RunProjectSetup(kitsuProjectID, projectName, projectType, language, kitsuHost, fallbackGuildID, requestedGuildID, botToken string, db *gorm.DB) (res SetupResult) {
 	setupStart := time.Now()
+	guildID := strings.TrimSpace(requestedGuildID)
+	if guildID == "" {
+		guildID = model.ResolveProjectGuildID(db, kitsuProjectID, fallbackGuildID)
+	}
+	if guildID == "" {
+		res.fail("no Discord guild is configured for this project")
+		return res
+	}
 	slog.Info("Project setup started", "projectName", projectName, "projectType", projectType, "kitsuProjectID", kitsuProjectID, "language", language)
 	defer func() {
 		res.Duration = time.Since(setupStart)
@@ -209,7 +217,7 @@ func RunProjectSetup(kitsuProjectID, projectName, projectType, language, kitsuHo
 	dbStart := time.Now()
 	slog.Info("Project setup persisting database records", "projectName", projectName, "kitsuProjectID", kitsuProjectID, "webhookCount", len(webhooksToSave))
 	if txErr := db.Transaction(func(tx *gorm.DB) error {
-		if err := model.CreateProject(tx, kitsuProjectID, projectName, projectType, categoryID, language); err != nil {
+		if err := model.CreateProject(tx, kitsuProjectID, projectName, projectType, guildID, categoryID, language); err != nil {
 			return fmt.Errorf("failed to create project record: %w", err)
 		}
 		for _, wh := range webhooksToSave {
@@ -270,7 +278,7 @@ func DeleteProject(kitsuProjectID, botToken string, db *gorm.DB) ([]string, erro
 	return logs, nil
 }
 
-func Handler(kitsuHost, guildID, botToken string, db *gorm.DB) http.HandlerFunc {
+func Handler(kitsuHost, fallbackGuildID, botToken string, db *gorm.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		lang := currentLang(r)
@@ -349,7 +357,15 @@ func Handler(kitsuHost, guildID, botToken string, db *gorm.DB) http.HandlerFunc 
 				fmt.Fprint(w, page(lang, t(lang, "プロジェクトが見つかりません", "Project not found"), "#ff6a50", "", `<li>`+t(lang, "プロジェクト情報を取得できませんでした。", "Could not load project info.")+`</li>`, `<a href="`+withLang("/bot/setup", r)+`">`+t(lang, "戻る", "Back")+`</a>`))
 				return
 			}
-			channelID, err := CreateTextChannel(guildID, project.DiscordCategoryID, channelName, botToken)
+			effectiveGuildID := strings.TrimSpace(project.DiscordGuildID)
+			if effectiveGuildID == "" {
+				effectiveGuildID = strings.TrimSpace(fallbackGuildID)
+			}
+			if effectiveGuildID == "" {
+				fmt.Fprint(w, page(lang, t(lang, "Discord Guild が未設定です", "Discord guild is not configured"), "#ff6a50", channelName, `<li>`+t(lang, "Admin > Projects & Guilds で Guild ID を設定してください。", "Set a guild ID in Admin > Projects & Guilds.")+`</li>`, `<a href="`+withLang("/bot/admin/projects", r)+`">`+t(lang, "Projects & Guilds", "Projects & Guilds")+`</a>`))
+				return
+			}
+			channelID, err := CreateTextChannel(effectiveGuildID, project.DiscordCategoryID, channelName, botToken)
 			if err != nil {
 				fmt.Fprint(w, page(lang, t(lang, "チャンネル作成に失敗しました", "Channel creation failed"), "#ff6a50", channelName, `<li>`+html.EscapeString(err.Error())+`</li>`, `<a href="`+withLang("/bot/setup", r)+`">`+t(lang, "戻る", "Back")+`</a>`))
 				return
@@ -462,7 +478,7 @@ func Handler(kitsuHost, guildID, botToken string, db *gorm.DB) http.HandlerFunc 
 				http.Error(w, "project name and type are required", http.StatusBadRequest)
 				return
 			}
-			result := RunProjectSetup(kitsuProjectID, projectName, projectType, language, kitsuHost, guildID, botToken, db)
+			result := RunProjectSetup(kitsuProjectID, projectName, projectType, language, kitsuHost, fallbackGuildID, "", botToken, db)
 			fmt.Fprint(w, renderResult(lang, projectName, result, r))
 			return
 		}

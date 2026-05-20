@@ -1,39 +1,27 @@
 ## Summary
 
-- What changed?
-- Why was it needed?
+## Scope
+- branch purpose:
+- task goal:
 
-## Verification
+## Touched files
+- 
 
-- [ ] `docker compose build app` succeeded
-- [ ] `docker compose ps` shows `app` healthy
-- [ ] polling still works (`Connected to Kitsu`, `Got tasks`, `Got taskStatuses`)
-- [ ] relevant routes were checked
-- [ ] docs or onboarding text was updated if behavior changed
+## Runtime behavior changed?
+- yes / no
 
-Routes checked:
+## Touches setup/auth/runtime?
+- setup: yes / no
+- auth: yes / no
+- runtime: yes / no
 
-- [ ] `/`
-- [ ] `/bot/login`
-- [ ] `/bot/docs/`
-- [ ] `/bot/admin`
-- [ ] `/bot/setup`
+## Validation
+- `go test ./src/... -count=1 -timeout=120s`
+- `go vet ./src/...`
+- `docker compose config -q`
 
-## Runtime Impact
+## Risk
+- 
 
-- [ ] no runtime behavior change
-- [ ] setup flow touched
-- [ ] auth or cookie handling touched
-- [ ] notification routing touched
-- [ ] SQLite or persistence touched
-
-## Security Review Notes
-
-- [ ] this change does not expose secrets
-- [ ] reverse proxy assumptions remain valid
-- [ ] FileBrowser/debug profile safety remains valid
-
-## Extra Notes
-
-- rollout concerns:
-- follow-up checks:
+## Obsidian log updated?
+- yes / no

@@ -1,16 +1,18 @@
 package setup
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"strings"
 	"time"
 
+	"app/src/api/discord"
 	"app/src/api/kitsu"
 	"app/src/model"
-	"app/src/utils/basicauth"
 	"gorm.io/gorm"
 )
 
@@ -18,12 +20,17 @@ import (
 
 // SetupStatusResponse is the response body for GET /api/setup/status.
 type SetupStatusResponse struct {
-	Kitsu         KitsuStatusInfo   `json:"kitsu"`
-	Discord       DiscordStatusInfo `json:"discord"`
-	Poller        PollerStatusInfo  `json:"poller"`
-	Project       ProjectStatusInfo `json:"project"`
-	SetupComplete bool              `json:"setup_complete"`
-	SetupWarnings []string          `json:"setup_warnings"`
+	Kitsu                KitsuStatusInfo      `json:"kitsu"`
+	Discord              DiscordStatusInfo    `json:"discord"`
+	Poller               PollerStatusInfo     `json:"poller"`
+	Project              ProjectStatusInfo    `json:"project"`
+	Projects             []ProjectGuildHealth `json:"projects,omitempty"`
+	Diagnostics          SetupDiagnostics     `json:"diagnostics,omitempty"`
+	ProjectSetupApplied  bool                 `json:"project_setup_applied"`
+	NotificationVerified bool                 `json:"notification_verified"`
+	SetupComplete        bool                 `json:"setup_complete"`
+	SetupWarnings        []string             `json:"setup_warnings"`
+	IncompleteReasons    []string             `json:"incomplete_reasons,omitempty"`
 }
 
 // KitsuStatusInfo holds the current Kitsu connectivity and auth state.
@@ -70,12 +77,22 @@ type ProjectStatusInfo struct {
 	WebhookCount int   `json:"webhook_count"`
 }
 
+type ProjectGuildHealth struct {
+	ProjectID      string `json:"project_id"`
+	ProjectName    string `json:"project_name"`
+	GuildID        string `json:"guild_id,omitempty"`
+	GuildValid     bool   `json:"guild_valid"`
+	PermissionValid bool  `json:"permission_valid"`
+	WebhookHealth  string `json:"webhook_health"`
+}
+
 // SetupProjectItem is one entry in the GET /api/setup/projects response.
 type SetupProjectItem struct {
 	ProjectID     string `json:"project_id"`
 	ProjectName   string `json:"project_name"`
 	TaskTypeCount int    `json:"task_type_count"`
 	IsConfigured  bool   `json:"is_configured"`
+	GuildID       string `json:"guild_id,omitempty"`
 }
 
 // ApplyProjectRequest is the request body for POST /api/setup/apply-project.
@@ -83,18 +100,51 @@ type ApplyProjectRequest struct {
 	ProjectID string `json:"project_id"`
 	Template  string `json:"template"`
 	Language  string `json:"language"`
+	GuildID   string `json:"guild_id"`
 }
 
 // ApplyProjectResponse is the response body for POST /api/setup/apply-project.
 type ApplyProjectResponse struct {
-	OK           bool     `json:"ok"`
-	ProjectID    string   `json:"project_id"`
-	ProjectName  string   `json:"project_name"`
-	ChannelCount int      `json:"channels_created"`
-	WebhookCount int      `json:"webhooks_created"`
-	SafeToRetry  bool     `json:"safe_to_retry"`
-	Lines        []string `json:"lines"`
-	Error        *string  `json:"error"`
+	OK                  bool     `json:"ok"`
+	ProjectID           string   `json:"project_id"`
+	ProjectName         string   `json:"project_name"`
+	GuildID             string   `json:"guild_id,omitempty"`
+	DiscordServerName   string   `json:"discord_server_name,omitempty"`
+	ChannelCount        int      `json:"channels_created"`
+	WebhookCount        int      `json:"webhooks_created"`
+	SafeToRetry         bool     `json:"safe_to_retry"`
+	ProjectSetupApplied bool     `json:"project_setup_applied"`
+	Warnings            []string `json:"warnings,omitempty"`
+	Lines               []string `json:"lines"`
+	Error               *string  `json:"error"`
+}
+
+type PreviewProjectRequest struct {
+	ProjectID       string            `json:"project_id"`
+	Template        string            `json:"template"`
+	Language        string            `json:"language"`
+	GuildID         string            `json:"guild_id"`
+	Mode            string            `json:"mode"`
+	ChannelBindings map[string]string `json:"channel_bindings,omitempty"`
+}
+
+type PreviewProjectChannel struct {
+	Name      string   `json:"name"`
+	TaskTypes []string `json:"task_types"`
+}
+
+type PreviewProjectResponse struct {
+	OK                bool                  `json:"ok"`
+	ProjectID         string                `json:"project_id"`
+	ProjectName       string                `json:"project_name,omitempty"`
+	DiscordServerName string                `json:"discord_server_name,omitempty"`
+	GuildID           string                `json:"guild_id,omitempty"`
+	CategoryName      string                `json:"category_name,omitempty"`
+	ChannelsToCreate  []PreviewProjectChannel `json:"channels_to_create,omitempty"`
+	ChannelsToReuse   []PreviewProjectChannel `json:"channels_to_reuse,omitempty"`
+	WebhooksToCreate  int                   `json:"webhooks_to_create"`
+	Warnings          []string              `json:"warnings,omitempty"`
+	Error             *string               `json:"error,omitempty"`
 }
 
 // TestKitsuRequest is the request body for POST /api/setup/test-kitsu.
@@ -127,6 +177,20 @@ type TestDiscordResponse struct {
 	Error       *string               `json:"error"`
 }
 
+type TestNotificationRequest struct {
+	ProjectID string `json:"project_id"`
+	Message   string `json:"message"`
+}
+
+type TestNotificationResponse struct {
+	OK                   bool    `json:"ok"`
+	ProjectID            string  `json:"project_id"`
+	ProjectName          string  `json:"project_name,omitempty"`
+	MessageID            string  `json:"message_id,omitempty"`
+	NotificationVerified bool    `json:"notification_verified"`
+	Error                *string `json:"error"`
+}
+
 // --- Handlers ---
 
 // SetupStatusHandler handles GET /api/setup/status.
@@ -135,28 +199,20 @@ func SetupStatusHandler(db *gorm.DB, pollIntervalSec int, refreshCreds func() (k
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		kitsuHost, botToken, guildID, _ := refreshCreds()
-
+		snapshot := BuildSetupDiagnostics(db, refreshCreds)
 		resp := SetupStatusResponse{
-			Kitsu:   checkKitsuStatus(kitsuHost),
-			Discord: checkDiscordStatus(botToken, guildID),
-			Poller:  buildPollerStatus(pollIntervalSec),
-			Project: buildProjectStatus(db),
+			Kitsu:                checkKitsuStatus(kitsuHost),
+			Discord:              checkDiscordStatus(botToken, guildID),
+			Poller:               buildPollerStatus(pollIntervalSec),
+			Project:              buildProjectStatus(db),
+			Projects:             buildProjectGuildHealth(db, botToken, guildID),
+			Diagnostics:          snapshot,
+			ProjectSetupApplied:  snapshot.ProjectSetupApplied,
+			NotificationVerified: snapshot.NotificationVerified,
 		}
-
-		resp.SetupComplete = resp.Kitsu.Authenticated &&
-			resp.Discord.BotValid &&
-			resp.Discord.GuildValid &&
-			resp.Discord.Permissions.ManageChannels &&
-			resp.Discord.Permissions.ManageWebhooks
-
-		resp.SetupWarnings = []string{}
-		if !resp.Discord.Permissions.ManageChannels {
-			resp.SetupWarnings = append(resp.SetupWarnings, "Discord bot is missing MANAGE_CHANNELS permission")
-		}
-		if !resp.Discord.Permissions.ManageWebhooks {
-			resp.SetupWarnings = append(resp.SetupWarnings, "Discord bot is missing MANAGE_WEBHOOKS permission")
-		}
-
+		resp.SetupComplete = snapshot.SetupComplete
+		resp.SetupWarnings = append(resp.SetupWarnings, snapshot.Warnings...)
+		resp.IncompleteReasons = incompleteReasons(snapshot)
 		json.NewEncoder(w).Encode(resp)
 	}
 }
@@ -171,22 +227,103 @@ func ProjectsHandler(db *gorm.DB) http.HandlerFunc {
 		taskTypeCount := len(kitsu.GetTaskTypes().Each)
 
 		configured := model.ListProjects(db)
-		configuredIDs := make(map[string]bool, len(configured))
+		configuredByID := make(map[string]model.Project, len(configured))
 		for _, p := range configured {
-			configuredIDs[p.KitsuProjectID] = true
+			configuredByID[p.KitsuProjectID] = p
 		}
 
 		out := make([]SetupProjectItem, 0, len(kitsuProjects.Each))
 		for _, p := range kitsuProjects.Each {
+			cfg, ok := configuredByID[p.ID]
 			out = append(out, SetupProjectItem{
 				ProjectID:     p.ID,
 				ProjectName:   strings.TrimSpace(p.Name),
 				TaskTypeCount: taskTypeCount,
-				IsConfigured:  configuredIDs[p.ID],
+				IsConfigured:  ok,
+				GuildID:       strings.TrimSpace(cfg.DiscordGuildID),
 			})
 		}
 
 		json.NewEncoder(w).Encode(out)
+	}
+}
+
+// PreviewProjectHandler handles POST /api/setup/preview-project.
+// It is read-only and never creates Discord resources, webhooks, DB records, or mapping updates.
+func PreviewProjectHandler(db *gorm.DB, refreshCreds func() (kitsuHost, botToken, guildID, webhookURL string)) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+
+		var req PreviewProjectRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			errStr := "invalid request body"
+			json.NewEncoder(w).Encode(PreviewProjectResponse{Error: &errStr})
+			return
+		}
+
+		projectID := strings.TrimSpace(req.ProjectID)
+		if projectID == "" {
+			errStr := "project_id is required"
+			json.NewEncoder(w).Encode(PreviewProjectResponse{Error: &errStr})
+			return
+		}
+
+		template := strings.ToLower(strings.TrimSpace(req.Template))
+		if template == "" {
+			template = "cg"
+		}
+		tmpl, ok := Templates[template]
+		if !ok {
+			errStr := "unsupported template: " + template
+			json.NewEncoder(w).Encode(PreviewProjectResponse{ProjectID: projectID, Error: &errStr})
+			return
+		}
+
+		language := strings.TrimSpace(req.Language)
+		if language != "en" {
+			language = "ja"
+		}
+
+		project := kitsu.GetProject(projectID)
+		projectName := strings.TrimSpace(project.Name)
+		if projectName == "" {
+			errStr := "project not found in Kitsu (id: " + projectID + ")"
+			json.NewEncoder(w).Encode(PreviewProjectResponse{ProjectID: projectID, Error: &errStr})
+			return
+		}
+
+		_, botToken, fallbackGuildID, _ := refreshCreds()
+		resolvedGuildID, usedFallback := resolveProjectGuildForSetup(db, projectID, strings.TrimSpace(req.GuildID), fallbackGuildID)
+		if resolvedGuildID == "" {
+			errStr := "no Discord guild is configured for this project"
+			json.NewEncoder(w).Encode(PreviewProjectResponse{ProjectID: projectID, ProjectName: projectName, Error: &errStr})
+			return
+		}
+
+		serverName := resolvedGuildID
+		if info := checkDiscordStatus(botToken, resolvedGuildID); strings.TrimSpace(info.GuildName) != "" {
+			serverName = strings.TrimSpace(info.GuildName)
+		}
+
+		resp := PreviewProjectResponse{
+			OK:                true,
+			ProjectID:         projectID,
+			ProjectName:       projectName,
+			DiscordServerName: serverName,
+			GuildID:           resolvedGuildID,
+			CategoryName:      projectName,
+			ChannelsToCreate:  buildTemplatePreviewChannels(tmpl, language),
+		}
+		resp.WebhooksToCreate = len(resp.ChannelsToCreate)
+
+		if usedFallback {
+			resp.Warnings = append(resp.Warnings, "This project does not have a fixed Discord Server yet, so the fallback server will be used.")
+		}
+		if strings.ToLower(strings.TrimSpace(req.Mode)) == "reuse" {
+			resp.Warnings = append(resp.Warnings, "Existing channel reuse is not available yet in v0.1.0. This preview shows the new-channel plan instead.")
+		}
+
+		json.NewEncoder(w).Encode(resp)
 	}
 }
 
@@ -236,17 +373,31 @@ func ApplyProjectHandler(db *gorm.DB, refreshCreds func() (kitsuHost, botToken, 
 
 		kitsuHost, botToken, guildID, _ := refreshCreds()
 
-		result := RunProjectSetup(projectID, projectName, template, language, kitsuHost, guildID, botToken, db)
+		reqGuildID := strings.TrimSpace(req.GuildID)
+		result := RunProjectSetup(projectID, projectName, template, language, kitsuHost, guildID, reqGuildID, botToken, db)
+		resolvedGuildID, _ := resolveProjectGuildForSetup(db, projectID, reqGuildID, guildID)
+		serverName := resolvedGuildID
+		if info := checkDiscordStatus(botToken, resolvedGuildID); strings.TrimSpace(info.GuildName) != "" {
+			serverName = strings.TrimSpace(info.GuildName)
+		}
 
 		resp := ApplyProjectResponse{
-			OK:          result.OK,
-			ProjectID:   projectID,
-			ProjectName: projectName,
-			SafeToRetry: result.SafeToRetry,
-			Lines:       result.Lines,
+			OK:                result.OK,
+			ProjectID:         projectID,
+			ProjectName:       projectName,
+			GuildID:           resolvedGuildID,
+			DiscordServerName: serverName,
+			SafeToRetry:       result.SafeToRetry,
+			Lines:             result.Lines,
 		}
 
 		if result.OK {
+			model.SetSetting(db, setupProjectAppliedKey, "true")
+			model.SetSetting(db, setupProjectAppliedProjectKey, projectID)
+			model.SetSetting(db, setupProjectAppliedAtKey, time.Now().Format(time.RFC3339))
+			model.SetSetting(db, setupTestNotificationVerifiedKey, "false")
+			model.DeleteSetting(db, setupTestNotificationProjectKey)
+			model.DeleteSetting(db, setupTestNotificationAtKey)
 			// Count channels and webhook assignments created
 			webhooks := model.ListProjectWebhooks(db, projectID)
 			seenChannels := make(map[string]bool)
@@ -259,6 +410,7 @@ func ApplyProjectHandler(db *gorm.DB, refreshCreds func() (kitsuHost, botToken, 
 			}
 			resp.ChannelCount = len(seenChannels)
 			resp.WebhookCount = webhookCount
+			resp.ProjectSetupApplied = true
 		} else {
 			errStr := "project setup failed — see lines for details"
 			for _, line := range result.Lines {
@@ -274,9 +426,82 @@ func ApplyProjectHandler(db *gorm.DB, refreshCreds func() (kitsuHost, botToken, 
 	}
 }
 
+// TestNotificationHandler sends a small message to one project webhook and marks the setup as verified.
+func TestNotificationHandler(db *gorm.DB, refreshCreds func() (kitsuHost, botToken, guildID, webhookURL string)) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		var req TestNotificationRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			errStr := "invalid request body"
+			json.NewEncoder(w).Encode(TestNotificationResponse{Error: &errStr})
+			return
+		}
+
+		projectID := strings.TrimSpace(req.ProjectID)
+		if projectID == "" {
+			projects := model.ListProjects(db)
+			if len(projects) == 1 {
+				projectID = projects[0].KitsuProjectID
+			}
+		}
+		if projectID == "" {
+			errStr := "project_id is required"
+			json.NewEncoder(w).Encode(TestNotificationResponse{Error: &errStr})
+			return
+		}
+
+		project := model.FindProjectByKitsuID(db, projectID)
+		if project == nil {
+			errStr := "project not found"
+			json.NewEncoder(w).Encode(TestNotificationResponse{ProjectID: projectID, Error: &errStr})
+			return
+		}
+
+		webhooks := model.ListProjectWebhooks(db, projectID)
+		targetURL := ""
+		for _, wh := range webhooks {
+			if strings.TrimSpace(wh.WebhookURL) != "" {
+				targetURL = strings.TrimSpace(wh.WebhookURL)
+				break
+			}
+		}
+		if targetURL == "" {
+			errStr := "no webhook configured for this project"
+			json.NewEncoder(w).Encode(TestNotificationResponse{ProjectID: projectID, Error: &errStr})
+			return
+		}
+
+		message := strings.TrimSpace(req.Message)
+		if message == "" {
+			message = "KitsuSync test notification"
+		}
+		res := discord.SendMessage(discord.Payload{
+			Username: "KitsuSync",
+			Content:  message,
+		}, targetURL, "", "")
+		if strings.TrimSpace(res.MessageID) == "" {
+			errStr := "test notification failed to send"
+			json.NewEncoder(w).Encode(TestNotificationResponse{ProjectID: projectID, Error: &errStr})
+			return
+		}
+
+		model.SetSetting(db, setupTestNotificationVerifiedKey, "true")
+		model.SetSetting(db, setupTestNotificationProjectKey, projectID)
+		model.SetSetting(db, setupTestNotificationAtKey, time.Now().Format(time.RFC3339))
+
+		json.NewEncoder(w).Encode(TestNotificationResponse{
+			OK:                   true,
+			ProjectID:            projectID,
+			ProjectName:          project.Name,
+			MessageID:            res.MessageID,
+			NotificationVerified: true,
+		})
+	}
+}
+
 // TestKitsuHandler handles POST /api/setup/test-kitsu.
 // Verifies connectivity and authentication against a provided Kitsu endpoint.
-func TestKitsuHandler() http.HandlerFunc {
+func TestKitsuHandler(db *gorm.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 
@@ -287,11 +512,14 @@ func TestKitsuHandler() http.HandlerFunc {
 		}
 
 		hostname := strings.TrimSpace(req.Hostname)
+		if hostname == "" {
+			hostname = publicKitsuHostnameFromRequest(r, os.Getenv("KITSU_HOSTNAME"))
+		}
 		email := strings.TrimSpace(req.Email)
 		password := req.Password
 
 		if hostname == "" || email == "" || password == "" {
-			writeTestKitsuError(w, "hostname, email, and password are required")
+			writeTestKitsuError(w, "hostname(auto), email, and password are required")
 			return
 		}
 		if !strings.HasPrefix(hostname, "http://") && !strings.HasPrefix(hostname, "https://") {
@@ -315,12 +543,16 @@ func TestKitsuHandler() http.HandlerFunc {
 			return
 		}
 
-		token := basicauth.AuthForJWTToken(hostname+"api/auth/login", email, password)
-		if token == "" {
-			errStr := "authentication failed — check email and password"
+		loginOK, loginReason := tryKitsuLogin(hostname, email, password)
+		if !loginOK {
+			errStr := loginReason
 			json.NewEncoder(w).Encode(TestKitsuResponse{Reachable: true, Error: &errStr})
 			return
 		}
+
+		model.SetSetting(db, "kitsu.hostname", hostname)
+		setRuntimeKitsuEmail(db, email)
+		setRuntimeKitsuPassword(password)
 
 		json.NewEncoder(w).Encode(TestKitsuResponse{Reachable: true, Authenticated: true})
 	}
@@ -328,7 +560,7 @@ func TestKitsuHandler() http.HandlerFunc {
 
 // TestDiscordHandler handles POST /api/setup/test-discord.
 // Verifies bot token validity, guild membership, and required permissions.
-func TestDiscordHandler() http.HandlerFunc {
+func TestDiscordHandler(db *gorm.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 
@@ -347,6 +579,9 @@ func TestDiscordHandler() http.HandlerFunc {
 		}
 
 		info := checkDiscordStatus(botToken, guildID)
+		os.Setenv("DISCORD_BOT_TOKEN", botToken)
+		os.Setenv("DISCORD_GUILD_ID", guildID)
+		model.SetSetting(db, "discord.guildID", guildID)
 		json.NewEncoder(w).Encode(TestDiscordResponse{
 			BotValid:    info.BotValid,
 			BotName:     info.BotName,
@@ -534,12 +769,83 @@ func buildProjectStatus(db *gorm.DB) ProjectStatusInfo {
 	return info
 }
 
+func buildProjectGuildHealth(db *gorm.DB, botToken, fallbackGuildID string) []ProjectGuildHealth {
+	projects := model.ListProjects(db)
+	out := make([]ProjectGuildHealth, 0, len(projects))
+	for _, p := range projects {
+		guildID := strings.TrimSpace(p.DiscordGuildID)
+		if guildID == "" {
+			guildID = strings.TrimSpace(fallbackGuildID)
+		}
+		discordInfo := checkDiscordStatus(botToken, guildID)
+		wh := model.ListProjectWebhooks(db, p.KitsuProjectID)
+		webhookHealth := "missing"
+		if len(wh) > 0 {
+			webhookHealth = "ok"
+		}
+		out = append(out, ProjectGuildHealth{
+			ProjectID:       p.KitsuProjectID,
+			ProjectName:     p.Name,
+			GuildID:         guildID,
+			GuildValid:      discordInfo.GuildValid,
+			PermissionValid: discordInfo.Permissions.ManageChannels && discordInfo.Permissions.ManageWebhooks,
+			WebhookHealth:   webhookHealth,
+		})
+	}
+	return out
+}
+
 func writeTestKitsuError(w http.ResponseWriter, msg string) {
 	json.NewEncoder(w).Encode(TestKitsuResponse{Error: &msg})
 }
 
 func writeTestDiscordError(w http.ResponseWriter, msg string) {
 	json.NewEncoder(w).Encode(TestDiscordResponse{Error: &msg})
+}
+
+func tryKitsuLogin(hostname, email, password string) (bool, string) {
+	loginURL := strings.TrimRight(hostname, "/") + "/api/auth/login"
+	payload := map[string]string{
+		"email":    email,
+		"password": password,
+	}
+	b, err := json.Marshal(payload)
+	if err != nil {
+		return false, "failed to build auth request"
+	}
+	req, err := http.NewRequest(http.MethodPost, loginURL, bytes.NewReader(b))
+	if err != nil {
+		return false, "failed to build auth request"
+	}
+	req.Header.Set("Content-Type", "application/json")
+	client := &http.Client{Timeout: 12 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return false, "authentication request failed: " + err.Error()
+	}
+	defer resp.Body.Close()
+
+	respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+	bodyText := strings.TrimSpace(string(respBody))
+	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+		var authResp struct {
+			Token string `json:"access_token"`
+		}
+		if err := json.Unmarshal(respBody, &authResp); err != nil || strings.TrimSpace(authResp.Token) == "" {
+			return false, "authentication endpoint returned success but token payload was invalid"
+		}
+		return true, ""
+	}
+	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+		if bodyText != "" {
+			return false, fmt.Sprintf("authentication failed (HTTP %d): %s", resp.StatusCode, bodyText)
+		}
+		return false, fmt.Sprintf("authentication failed (HTTP %d): email/password mismatch, SSO-only account, or local password not set", resp.StatusCode)
+	}
+	if bodyText != "" {
+		return false, fmt.Sprintf("authentication failed (HTTP %d): %s", resp.StatusCode, bodyText)
+	}
+	return false, fmt.Sprintf("authentication failed (HTTP %d)", resp.StatusCode)
 }
 
 // --- Mapping API types ---
@@ -662,6 +968,44 @@ func MappingStateHandler(db *gorm.DB) http.HandlerFunc {
 			CheckerMaps:  checkerMaps,
 		})
 	}
+}
+
+func resolveProjectGuildForSetup(db *gorm.DB, projectID, requestedGuildID, fallbackGuildID string) (string, bool) {
+	guildID := strings.TrimSpace(requestedGuildID)
+	if guildID != "" {
+		return guildID, false
+	}
+	projectGuild := projectGuildSetting(db, projectID)
+	if projectGuild != "" {
+		return projectGuild, false
+	}
+	guildID = model.ResolveProjectGuildID(db, projectID, fallbackGuildID)
+	return guildID, strings.TrimSpace(guildID) != "" && projectGuild == ""
+}
+
+func projectGuildSetting(db *gorm.DB, projectID string) string {
+	project := model.FindProjectByKitsuID(db, projectID)
+	if project == nil {
+		return ""
+	}
+	return strings.TrimSpace(project.DiscordGuildID)
+}
+
+func buildTemplatePreviewChannels(tmpl ProjectTemplate, language string) []PreviewProjectChannel {
+	groups := make(map[string][]string)
+	order := make([]string, 0, len(tmpl.Channels))
+	for _, ch := range tmpl.Channels {
+		name := ch.Name(language)
+		if _, ok := groups[name]; !ok {
+			order = append(order, name)
+		}
+		groups[name] = append(groups[name], ch.TaskType)
+	}
+	out := make([]PreviewProjectChannel, 0, len(order))
+	for _, name := range order {
+		out = append(out, PreviewProjectChannel{Name: name, TaskTypes: groups[name]})
+	}
+	return out
 }
 
 // SaveUserMappingHandler handles POST /api/setup/mapping/users.
