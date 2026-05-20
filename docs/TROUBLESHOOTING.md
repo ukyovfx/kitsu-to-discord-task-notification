@@ -142,13 +142,13 @@ The bot is not in the server, or the Guild ID is wrong.
 
 ### Step 3 (Project) shows "FAIL:" lines
 
-The setup rolled back automatically. Read the `FAIL:` line carefully:
+KitsuSync attempts rollback automatically, but rollback is best-effort. Read the `FAIL:` line carefully:
 
 - `failed to create Discord category` — bot lacks Manage Channels permission
 - `failed to create webhook` — bot lacks Manage Webhooks permission
 - `Kitsu project was not found` — project was deleted from Kitsu; reload the page
 
-If the output shows `✅ Safe to retry`, fix the reported error and click Create Channels again — no manual cleanup needed.
+If the output shows `✅ Safe to retry`, fix the reported error and click Create Channels again. If it does not, inspect Discord manually before retrying.
 
 ### Step 4 (Mapping) shows "no project configured"
 
@@ -171,7 +171,7 @@ The wizard auto-detects state from `/api/setup/status`. If the state is stale (e
 
 ### Project Setup fails partway through
 
-The setup UI shows `FAIL:` or `WARN:` lines describing what failed. Partial Discord resources (categories, channels, webhooks) are rolled back on a best-effort basis.
+The setup UI shows `FAIL:` or `WARN:` lines describing what failed. Partial Discord resources (categories, channels, webhooks) are rolled back on a best-effort basis, not a hard guarantee.
 
 **Before re-running setup:**
 

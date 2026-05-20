@@ -81,8 +81,8 @@ If you need these capabilities, keep them in roadmap planning instead of extendi
 ## UI Surfaces
 
 - `/bot/login` — admin sign-in
-- `/bot/setup-wizard` — guided 4-step first-time setup (recommended entry point)
-- `/bot/setup` — direct project and channel management
+- `/bot/setup-wizard` — recommended first-time entry point; may first show a setup mode chooser and System Check
+- `/bot/setup` — direct project and channel management after initial setup or for advanced/manual edits
 - `/bot/admin` — operational dashboard: system health, active projects, warnings
 - `/bot/admin/users` — map Kitsu users to Discord IDs for @mentions
 - `/bot/admin/checkers` — map task types to reviewer Discord IDs
@@ -93,7 +93,7 @@ Screenshot placeholders and capture guidance live in `screenshots/README.md`.
 ## Getting Started
 
 See `docs/QUICK_START.md` for a 5-minute startup guide.
-See `docs/SETUP_WIZARD.md` for a detailed walkthrough of each wizard step.
+See `docs/SETUP_WIZARD.md` for the current setup entry flow, guided steps, and manual diagnostics path.
 
 ## Repository Layout
 
@@ -193,7 +193,8 @@ curl http://localhost:8090/health
 
 - Login page: `http://localhost:8090/bot/login`
 - Docs: `http://localhost:8090/bot/docs/`
-- Setup: `http://localhost:8090/bot/setup`
+- Setup Wizard: `http://localhost:8090/bot/setup-wizard`
+- Direct Setup: `http://localhost:8090/bot/setup`
 - Admin: `http://localhost:8090/bot/admin`
 
 ### Behind a reverse proxy
@@ -202,18 +203,19 @@ Use the public `/bot/*` paths exposed by your proxy, for example:
 
 - `/bot/login`
 - `/bot/docs/`
+- `/bot/setup-wizard`
 - `/bot/setup`
 - `/bot/admin`
 
 ### Operator checklist
 
 1. Open `/bot/login` and sign in with your Kitsu manager or admin account.
-2. If runtime credentials are not already in `.env.local`, run Bot Setup from `/bot/admin/bot`.
-3. Open `/bot/admin/projects` and assign a Discord Guild ID for each Kitsu project.
-4. Create or choose a Kitsu project from Project Setup.
-5. Confirm the Discord category, channels, and webhooks are created in the assigned guild.
-6. Review routing and user mappings in `/bot/admin`.
-7. Wait for polling logs such as `Connected to Kitsu`, `Got tasks`, and `Done FilterTasks`.
+2. Open `/bot/setup-wizard` first. The first screen may show a mode chooser before step-by-step setup begins.
+3. If required values are still missing, complete System Check first, then save shared bot/runtime credentials in `/bot/admin/bot`.
+4. Open `/bot/admin/projects` and assign a Discord Guild ID for each Kitsu project.
+5. In Guided Setup, connection checks test access first. Discord categories, channels, and webhooks are only created after the Project Setup confirmation step.
+6. If setup fails after partial Discord provisioning, rollback is best-effort and manual cleanup may still be required before retrying.
+7. Review routing and user mappings in `/bot/admin`, then watch polling logs such as `Connected to Kitsu`, `Got tasks`, and `Done FilterTasks`.
 
 ## Environment Variables
 

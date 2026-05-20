@@ -122,34 +122,30 @@ Sign in with your **personal** Kitsu manager or admin account. This is not the r
 
 Sessions expire after 15 minutes.
 
-### Step 2: Bot Setup (`/bot/admin/bot`)
+### Step 2: Start from the Setup Wizard (`/bot/setup-wizard`)
 
-This step verifies that the bot token and guild ID are working.
+For first-time setup, start at `/bot/setup-wizard` after login. The first screen may show a mode chooser before Guided Setup begins.
 
-1. Open `/bot/setup`.
-2. Click **Bot Setup** (or the equivalent button in your language).
-3. If successful, you'll see the bot username and server name confirmed.
+1. Open `/bot/setup-wizard`.
+2. If the wizard stops at **System Check**, fill the missing required values first.
+3. Use `/bot/admin/bot` to save shared bot/runtime credentials when prompted.
+4. Use `/bot/admin/projects` to assign a Discord Guild ID per Kitsu project.
 
-### Step 3: Assign Guild per Project (`/bot/admin/projects`)
+### Step 3: Project Setup (`/bot/setup-wizard` recommended, `/bot/setup` for direct management)
 
-For each Kitsu project, set the Discord Guild ID where channels should be created.
-
-### Step 4: Project Setup (`/bot/setup` → Project Setup)
-
-This creates Discord channels and webhooks for one Kitsu project.
+This stage handles Discord resource creation for one Kitsu project.
 
 1. Select a Kitsu project from the dropdown.
-2. Choose a project type (`cg` is currently the only supported type).
-3. Choose the language for channel names (Japanese or English).
-4. Select how to handle Discord channel routing:
-   - **Create new category** — KitsuSync creates a new category and all channels under it.
-   - **Use existing category** — choose an existing Discord category to place channels in.
-5. Click **Run Setup**.
+2. Confirm the target Discord Server / Guild assignment.
+3. Review the preview before creation.
+4. Confirm creation only after the preview looks correct.
+5. Send one test notification before treating the project as complete.
 
-If setup succeeds, you'll see channel names confirmed in the output.
-If setup fails partway through, read the `FAIL:` / `WARN:` lines in the output — partial changes are rolled back automatically.
+Connection testing happens before this stage. This is the point where Discord categories, channels, and webhooks may actually be created.
 
-### Step 5: Review Routing (`/bot/admin`)
+If setup fails partway through, read the `FAIL:` / `WARN:` lines in the output carefully. Rollback is best-effort, and manual Discord cleanup may still be required before retrying.
+
+### Step 4: Review Routing (`/bot/admin`)
 
 After project setup, open `/bot/admin` to verify:
 
