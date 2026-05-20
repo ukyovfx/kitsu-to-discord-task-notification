@@ -629,8 +629,8 @@ func renderActiveStepBody(lang string, diag SetupDiagnostics, currentStep int, d
 			`Enable <strong>Developer Mode</strong> in Discord (Settings › Advanced), right-click the server icon → "Copy Server ID".`,
 		)
 		botTokenHint := t(lang,
-			`このフォームは接続テスト専用です。Bot Token を保存するには <a href="/bot/admin/bot" style="color:var(--accent-2)">Bot設定</a> に入力してください。`,
-			`This form is for connection testing only. To save the Bot Token permanently, enter it in <a href="/bot/admin/bot" style="color:var(--accent-2)">Bot Settings</a>.`,
+			`このフォームは接続テスト専用です。通知先サーバーで使う予定の、自分が管理している Bot Token を入力してください。Bot Token を保存するには <a href="/bot/admin/bot" style="color:var(--accent-2)">Bot設定</a> に入力してください。`,
+			`This form is for connection testing only. Enter a bot token that you control and intend to use for this server. To save the Bot Token permanently, enter it in <a href="/bot/admin/bot" style="color:var(--accent-2)">Bot Settings</a>.`,
 		)
 		return fmt.Sprintf(`
 <section class="guided-step active">
@@ -655,7 +655,7 @@ func renderActiveStepBody(lang string, diag SetupDiagnostics, currentStep int, d
   <div id="guidedStep2Result" class="guided-result hidden"></div>
 </section>`,
 			html.EscapeString(t(lang, "Step 2: Discord Bot", "Step 2: Discord Bot")),
-			html.EscapeString(t(lang, "BotトークンとDiscordサーバーIDを入力し、接続・権限を確認します。", "Enter your bot token and Discord server ID to verify the connection and permissions.")),
+			html.EscapeString(t(lang, "BotトークンとDiscordサーバーIDを使って、setup に必要な接続と権限を確認します。Bot は category / channels / webhooks の作成と通知送信に使われますが、この setup flow ではメンバー招待やユーザー管理は要求しません。", "Use your bot token and Discord server ID to verify the connection and the permissions required for setup. The bot is used to create categories, channels, and webhooks for setup, and to send setup/test/notification messages through Discord webhooks. This setup flow does not require member invites or user account management.")),
 			html.EscapeString(stepBadgeText(lang, diag.Discord.Status)),
 			html.EscapeString(discordServerName),
 			html.EscapeString(discordServerDetail),
