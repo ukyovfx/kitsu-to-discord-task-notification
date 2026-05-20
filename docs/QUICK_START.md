@@ -77,22 +77,28 @@ If you get a 502 or connection refused, the app is still starting — wait a mom
 
 1. Open `http://YOUR_SERVER:8090/bot/login` in a browser.
 2. Sign in with your **personal** Kitsu manager or admin account.
-3. After login, open `/bot/admin/bot` then `/bot/admin/projects` first.
+3. Open `/bot/setup-wizard`. The first screen may show a setup mode chooser before Guided Setup begins.
+4. If required values are still missing, the wizard may stop at **System Check** before Kitsu/Discord/project setup.
+5. Save shared bot/runtime credentials in `/bot/admin/bot`, then assign project -> guild in `/bot/admin/projects` if the wizard asks for it.
 
-The wizard walks you through 4 steps:
+If you choose **Guided Setup**, the flow then moves through these stages:
 
-| Step | What it does |
+| Stage | What it does |
 |------|-------------|
-| 1. Kitsu | Verifies your Kitsu connection and authentication |
-| 2. Discord | Confirms the bot token, server membership, and permissions |
-| 3. Project | Creates Discord channels and webhooks for one Kitsu project in its assigned guild |
-| 4. Mapping | (Optional) Maps Kitsu users to Discord IDs for @mentions |
+| System Check | Verifies that required env/config values exist before setup continues |
+| Kitsu | Tests Kitsu reachability and authentication |
+| Discord | Tests bot token, server membership, and permissions |
+| Project | Previews Discord changes, then creates channels/webhooks only after confirmation |
+| Mapping | (Optional) Adds user/reviewer mention mappings after the first notification works |
 
-Each step tests the connection live and shows errors inline before you proceed.
+Connection tests do not create Discord resources. Project Setup creates Discord categories, channels, and webhooks only after the confirm step.
 
 ---
 
 ## Step 4 — Verify notifications
+
+If Project Setup fails after partial Discord provisioning, rollback is best-effort. If the UI does not show **Safe to retry**, check the setup output and `docs/TROUBLESHOOTING.md` before running it again.
+
 
 1. In Kitsu, change a task status to **WFA**, **Retake**, or **Done**.
 2. Watch the logs: `docker compose logs -f app`

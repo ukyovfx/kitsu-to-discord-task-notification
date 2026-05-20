@@ -1,6 +1,6 @@
 # Setup Wizard Reference
 
-The Setup Wizard (`/bot/setup-wizard`) is the **Guided Setup** path for v0.1.0. Admin-first setup is also available through `/bot/admin/setup`, which shows the same diagnostics in a manual checklist view. Both paths end at the same rule: one project, one guild, and one successful test notification.
+The Setup Wizard (`/bot/setup-wizard`) is the recommended first-time entry point for v0.1.0. It may open with a small entry chooser before Guided Setup begins. Admin-first setup is also available through `/bot/admin/setup`, which shows the same diagnostics in a manual checklist view. Both paths end at the same rule: one project, one guild, and one successful test notification.
 
 If you are starting from a clean clone, the intended operator path is:
 
@@ -16,16 +16,24 @@ If you are starting from a clean clone, the intended operator path is:
 
 ## Overview
 
-The current implementation uses the new guided/manual diagnostics model. The legacy 4-step table below is kept as a reference, but the active setup flow now centers on env, Kitsu, Discord, project->guild, and test notification checks.
+The current implementation uses the guided/manual diagnostics model. A first-time operator may see three layers:
 
-| Step | Name | Required | What it configures |
-|------|------|----------|--------------------|
-| 1 | Kitsu Connection | ✅ Yes | Kitsu hostname, email, password |
-| 2 | Discord Bot | ✅ Yes | Bot token, Guild ID, permissions |
-| 3 | Project Setup | ✅ Yes | Discord channels and webhooks for one Kitsu project |
-| 4 | User & Checker Mapping | Optional | @mention routing for users and reviewers |
+1. An entry chooser (`Guided Setup` or `Quick Setup`)
+2. A `System Check` gate if required env/config values are still missing
+3. The guided setup stages for Kitsu, Discord, Project Setup, and optional Mapping
 
-The wizard pre-populates steps from the current system state. If Kitsu and Discord are already configured, the wizard opens directly at Step 3 or 4.
+The table below is still useful as a mental model, but the live product is not always a direct 4-step flow from the first page load.
+
+| Stage | Required | What it does |
+|------|----------|--------------------|
+| Entry chooser | Contextual | Lets the operator pick Guided Setup or Quick Setup |
+| System Check | When needed | Stops early if required env/config values are missing |
+| Kitsu Connection | ✅ Yes | Tests Kitsu hostname, reachability, and authentication |
+| Discord Bot | ✅ Yes | Tests bot token, Guild ID, and permissions |
+| Project Setup | ✅ Yes | Previews and then creates Discord channels/webhooks for one Kitsu project |
+| User & Checker Mapping | Optional | Adds @mention routing for users and reviewers |
+
+The wizard pre-populates stages from the current system state. If Kitsu and Discord are already configured, Guided Setup may open directly at Project Setup or Mapping.
 
 ---
 
@@ -40,6 +48,8 @@ The wizard pre-populates steps from the current system state. If Kitsu and Disco
 | Kitsu Hostname | `http://kitsu.studio.local/` | Must include `http://` or `https://` and a trailing slash |
 | Email | `bot@studio.com` | The dedicated runtime Kitsu account, not your personal login |
 | Password | — | The runtime account password |
+
+This stage is a connection test only. It checks access, but does not create Discord resources or save project routing.
 
 **Checking connection** calls `POST /api/setup/test-kitsu`. The API:
 1. Pings `{hostname}/api/` — if unreachable, reports "server not reachable"
@@ -69,6 +79,8 @@ The wizard pre-populates steps from the current system state. If Kitsu and Disco
 |-------|---------|-------|
 | Bot Token | `MTUwMTUx...` | From Discord Developer Portal → Bot tab → Reset Token |
 | Guild ID | `1234567890123456789` | Right-click server name in Discord (Developer Mode must be on) |
+
+This stage is also a connection test. It verifies the bot and server access first; persistent credential changes belong in `/bot/admin/bot`.
 
 **Checking the bot** calls `POST /api/setup/test-discord`. The API:
 1. Validates the bot token against Discord's `/users/@me`
@@ -110,7 +122,7 @@ The wizard pre-populates steps from the current system state. If Kitsu and Disco
 4. Creates a Discord webhook in each channel
 5. Records all channels and webhook URLs in the database
 
-Each step is atomic — if any channel creation fails, the entire setup is rolled back automatically. You can re-run setup after fixing the issue.
+Project Setup creates Discord resources only after the confirm step. If provisioning fails, KitsuSync attempts rollback automatically, but rollback is best-effort. If the UI does not show `Safe to retry`, inspect the setup output and be prepared to clean up partial Discord resources manually before retrying.
 
 **On success:** Shows channel count and webhook count, then unlocks a test notification action inside Step 3. Step 3 is only complete after the test notification succeeds.
 
@@ -122,9 +134,9 @@ Each step is atomic — if any channel creation fails, the entire setup is rolle
 | `unsupported template: ...` | Invalid template name | Use `cg` (the only supported template currently) |
 | `FAIL: failed to create Discord category` | Bot lacks Manage Channels | Fix bot permissions (see Step 2) |
 | `FAIL: failed to create webhook` | Bot lacks Manage Webhooks | Fix bot permissions (see Step 2) |
-| `✅ Safe to retry` badge | Setup failed but no partial state remains | Fix the reported error and click Create Channels again |
+| `✅ Safe to retry` badge | Setup failed and rollback completed cleanly | Fix the reported error and click Create Channels again |
 
-> **Tip:** If you see `WARN:` lines but the setup completes (OK), the warnings are non-fatal. Common warning: a channel name already exists and was reused instead of created.
+> **Tip:** If you see `WARN:` lines but the setup completes (OK), the warnings are non-fatal. Common warning: a channel name already exists and was reused instead of created. If the output does not explicitly say it is safe to retry, treat partial Discord provisioning cautiously and verify the created resources manually.
 
 ### Already-configured projects
 
