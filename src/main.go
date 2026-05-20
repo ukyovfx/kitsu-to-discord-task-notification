@@ -7,6 +7,7 @@ import (
 	"app/src/setup"
 	"app/src/utils/basicauth"
 	"app/src/utils/config"
+	logutil "app/src/utils/log"
 	"context"
 	"database/sql"
 	"fmt"
@@ -686,9 +687,19 @@ func main() {
 		f.EnableColor = true
 		f.SetTemplate("[{{datetime}}] [{{level}}] [{{caller}}]\t{{message}} {{data}} {{extra}}\n")
 		f.ColorTheme = slog.ColorTheme
+		// Wrap stdout so docker compose logs output is also redacted
+		logger.Output = logutil.NewRedactingWriter(os.Stdout)
 	})
 
-	h1 := handler.MustFileHandler("./logs/all-levels.log", handler.WithLogLevels(slog.AllLevels))
+	// Open log file and wrap with redacting writer to prevent secret exposure
+	logFile, err := os.OpenFile("./logs/all-levels.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	if err != nil {
+		log.Fatalf("failed to open log file: %v", err)
+	}
+	defer logFile.Close()
+
+	redactingWriter := logutil.NewRedactingWriter(logFile)
+	h1 := handler.NewIOWriterHandler(redactingWriter, slog.AllLevels)
 	slog.PushHandler(h1)
 
 	// Set log level based on APP_ENV (production = INFO, development = DEBUG)
