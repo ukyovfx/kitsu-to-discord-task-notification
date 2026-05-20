@@ -252,6 +252,7 @@ func RenderGuidedSetupPageStepwise(db *gorm.DB, refreshCreds func() (kitsuHost, 
       if(data.warnings && data.warnings.length){
         html += '<ul class="guided-warning-list">' + data.warnings.map(function(item){ return '<li>' + esc(item) + '</li>'; }).join('') + '</ul>';
       }
+      html += '<div class="guided-banner warn" style="margin-top:12px"><strong>%s</strong><div class="guided-note" style="margin-top:6px">%s</div></div>';
       html += '<div class="guided-actions" style="margin-top:12px">';
       html += '<button id="guidedConfirmCreateBtn" class="btn" type="button">%s</button>';
       html += '<button id="guidedBackToPlanBtn" class="btn-ghost" type="button">%s</button>';
@@ -377,6 +378,8 @@ func RenderGuidedSetupPageStepwise(db *gorm.DB, refreshCreds func() (kitsuHost, 
 		esc(t(lang, "Category", "Category")),
 		esc(t(lang, "Channels", "Channels")),
 		esc(t(lang, "Webhooks", "Webhooks")),
+		esc(t(lang, "確認前の注意", "Before you confirm")),
+		esc(t(lang, "Preview ではまだ Discord に何も作成していません。次の Confirm and Create で category / channels / webhooks の作成を開始します。Preview 内容を確認してから進んでください。失敗時は best-effort で rollback を試みますが保証ではありません。必要なら残った Discord リソースを手動で確認または削除してから再試行してください。", "The preview has not created anything in Discord yet. The next Confirm and Create action starts creating the category, channels, and webhooks. Review the previewed plan before you continue. If provisioning fails, KitsuSync attempts best-effort rollback, but it is not guaranteed. You may need to manually check or delete leftover Discord resources before retrying.")),
 		esc(t(lang, "Confirm and Create", "Confirm and Create")),
 		esc(t(lang, "Back", "Back")),
 		withLang("/api/setup/apply-project", r),
