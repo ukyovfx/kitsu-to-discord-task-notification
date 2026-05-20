@@ -145,13 +145,13 @@ Connection testing happens before this stage. This is the point where Discord ca
 
 If setup fails partway through, read the `FAIL:` / `WARN:` lines in the output carefully. Rollback is best-effort, and manual Discord cleanup may still be required before retrying.
 
-### Step 4: Review Routing (`/bot/admin`)
+### Step 4: Optional Post-setup Routing Review (`/bot/admin`)
 
 After project setup, open `/bot/admin` to verify:
 
 - **Routing** tab: Shows which Kitsu task types send to which Discord channels.
-- **Users** tab: Map Kitsu usernames to Discord user IDs so the bot can `@mention` people.
-- **Checkers** tab: Map task types to checker Discord IDs so the bot mentions reviewers when status changes to WFA.
+- **Users** tab: Optional follow-up mapping of Kitsu usernames to Discord user IDs so the bot can `@mention` people.
+- **Checkers** tab: Optional follow-up mapping of task types to checker Discord IDs so the bot mentions reviewers when status changes to WFA.
 
 ---
 

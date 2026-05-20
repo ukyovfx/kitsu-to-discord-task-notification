@@ -37,9 +37,9 @@ func RenderGuidedSetupPageStepwise(db *gorm.DB, refreshCreds func() (kitsuHost, 
 	step1Summary := guidedKitsuSummary(lang, diag)
 	step2Summary := guidedDiscordSummary(lang, diag)
 	step3Summary := guidedProjectSummary(lang, diag)
-	step4Summary := t(lang, "Checker / user mapping は最初の通知成功後に追加すれば十分です。", "Checker / user mapping can wait until after the first successful notification.")
+	step4Summary := t(lang, "Checker / user mapping は optional な post-setup 設定です。必要になったら admin pages から追加できます。", "Checker / user mapping is optional post-setup configuration. Add it later from the admin pages when you need it.")
 	if currentStep < 4 {
-		step4Summary = t(lang, "Step 3 が完了するとここが見えるようになります。", "This step appears after Step 3 is complete.")
+		step4Summary = t(lang, "Step 3 完了後に開ける optional な admin follow-up です。", "This becomes available after Step 3 as an optional admin follow-up.")
 	}
 
 	step3Mode := "plan"
@@ -357,7 +357,7 @@ func RenderGuidedSetupPageStepwise(db *gorm.DB, refreshCreds func() (kitsuHost, 
 			nav.WriteString(navStepHTML(lang, 2, currentStep, step2Summary, t(lang, "Discord Bot", "Discord Bot")))
 			nav.WriteString(navStepHTML(lang, 3, currentStep, step3Summary, t(lang, "Project Setup", "Project Setup")))
 			if currentStep >= 4 {
-				nav.WriteString(navStepHTMLOptional(lang, 4, currentStep, step4Summary, t(lang, "Mapping (Optional)", "Mapping (Optional)")))
+				nav.WriteString(navStepHTMLOptional(lang, 4, currentStep, step4Summary, t(lang, "Post-setup Mapping (Optional)", "Post-setup Mapping (Optional)")))
 			}
 			return nav.String()
 		}(),
@@ -430,7 +430,7 @@ func guidedStepTitle(lang string, step int) string {
 	case 3:
 		return t(lang, "Project Setup", "Project Setup")
 	case 4:
-		return t(lang, "Mapping (Optional)", "Mapping (Optional)")
+		return t(lang, "Post-setup Mapping (Optional)", "Post-setup Mapping (Optional)")
 	default:
 		return t(lang, "Setup", "Setup")
 	}
@@ -680,14 +680,14 @@ func renderActiveStepBody(lang string, diag SetupDiagnostics, currentStep int, d
     <a class="btn-ghost" href="%s">%s</a>
   </div>
 </section>`,
-			html.EscapeString(t(lang, "Step 4: Mapping (Optional)", "Step 4: Mapping (Optional)")),
-			html.EscapeString(t(lang, "最初の通知成功後に追加すれば十分です。", "Add mapping later after the first successful notification.")),
+			html.EscapeString(t(lang, "Step 4: Post-setup Mapping (Optional)", "Step 4: Post-setup Mapping (Optional)")),
+			html.EscapeString(t(lang, "初回セットアップはここまでで完了です。mapping は必要に応じて後から admin pages で追加できます。", "Initial setup is already complete at this point. Add mapping later from the admin pages when you need it.")),
 			html.EscapeString("done"),
-			html.EscapeString(t(lang, "Checker / user mapping は初回セットアップの必須項目ではありません。", "Checker / user mapping is optional for initial setup.")),
+			html.EscapeString(t(lang, "通知や基本セットアップは mapping なしでも動作します。mapping を追加すると user / reviewer の @mention routing を細かく整えられます。", "Notifications and the basic setup already work without full mapping. Add mapping when you want more precise user / reviewer @mention routing.")),
 			html.EscapeString(withLang("/bot/admin/users", r)),
-			html.EscapeString(t(lang, "User Mapping", "User Mapping")),
+			html.EscapeString(t(lang, "User Mapping を開く", "Open User Mapping")),
 			html.EscapeString(withLang("/bot/admin/checkers", r)),
-			html.EscapeString(t(lang, "Checker Mapping", "Checker Mapping")),
+			html.EscapeString(t(lang, "Checker Mapping を開く", "Open Checker Mapping")),
 		)
 	}
 }
@@ -834,10 +834,10 @@ func renderGuidedStep3(lang string, diag SetupDiagnostics, projectOptions, defau
 		}(),
 		html.EscapeString(t(lang, "Project Setup complete", "Project Setup complete")),
 		html.EscapeString("done"),
-		html.EscapeString(t(lang, "テスト通知が完了しました。Step 3 は完了です。", "Test notification delivered — Step 3 is complete.")),
+		html.EscapeString(t(lang, "テスト通知が完了しました。ここで初回セットアップは完了です。optional な mapping は後から admin pages で追加できます。", "Test notification delivered — initial setup is complete here. Optional mapping can be added later from the admin pages.")),
 		html.EscapeString(t(lang, "テスト通知成功！セットアップが完了しました。", "Test notification succeeded! Setup is complete.")),
 		withLang("/bot/admin", r),
-		html.EscapeString(t(lang, "このまま完了する →", "Done — Go to Admin →")),
+		html.EscapeString(t(lang, "Admin で次の設定を見る →", "Go to Admin Next Steps →")),
 		withLang("/bot/admin/setup", r),
 		html.EscapeString(t(lang, "Manual Setup", "Manual Setup")),
 	)

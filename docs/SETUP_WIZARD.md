@@ -31,7 +31,7 @@ The table below is still useful as a mental model, but the live product is not a
 | Kitsu Connection | ✅ Yes | Tests Kitsu hostname, reachability, and authentication |
 | Discord Bot | ✅ Yes | Tests bot token, Guild ID, and permissions |
 | Project Setup | ✅ Yes | Previews and then creates Discord channels/webhooks for one Kitsu project |
-| User & Checker Mapping | Optional | Adds @mention routing for users and reviewers |
+| User & Checker Mapping | Optional | Optional post-setup/admin follow-up for user and reviewer @mention routing |
 
 The wizard pre-populates stages from the current system state. If required values are missing, System Check appears first on purpose so you can fix blockers before moving deeper into Guided Setup. If Kitsu and Discord are already configured, Guided Setup may open directly at Project Setup or Mapping.
 
@@ -142,17 +142,17 @@ Project Setup creates Discord resources only after the confirm step. If provisio
 
 ### Already-configured projects
 
-Projects that already have channels show in a "Configured" list at the top of Step 3. If all your projects are already configured, the wizard shows a completion message and offers a link to Step 4 for mapping.
+Projects that already have channels show in a "Configured" list at the top of Step 3. If all your projects are already configured, the wizard can already be considered functionally complete for setup/testing and then offers Step 4 as optional post-setup mapping.
 
 To add a second project, come back to the wizard after completing the first.
 
 ---
 
-## Step 4: User & Checker Mapping (Optional)
+## Step 4: User & Checker Mapping (Optional Post-setup)
 
-> **This step is optional.** If you skip it, notifications are still delivered. Only @mentions will be missing.
+> **This step is optional post-setup configuration.** If you skip it, notifications are still delivered. What you mainly miss is user/reviewer `@mentions` and finer routing polish.
 
-**What it does:** Maps Kitsu user accounts to Discord user IDs (for @mention on task assignment), and maps task types to reviewer Discord IDs (for @mention when status changes to WFA).
+**What it does:** Adds follow-up admin configuration for Kitsu user → Discord user IDs (for @mention on task assignment), and task type → reviewer Discord IDs (for @mention when status changes to WFA).
 
 **Loading mapping data** calls `GET /api/setup/mapping`, which returns:
 - All active Kitsu persons
@@ -183,7 +183,7 @@ Click **Save & Finish** to write all mappings at once. The wizard calls:
 
 Entries with an empty ID field are deleted from the database.
 
-Click **Skip** to go to the Done screen without saving.
+Click **Skip** to leave this for later and continue using the admin pages without saving.
 
 ---
 
