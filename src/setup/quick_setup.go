@@ -104,8 +104,8 @@ func RenderWizardEntryPage(db *gorm.DB, refreshCreds func() (kitsuHost, botToken
 		html.EscapeString(summaryText),
 
 		// Guided Setup card
-		html.EscapeString(t(lang, "Guided Setup（初心者向け）", "Guided Setup (Beginner)")),
-		html.EscapeString(t(lang, "1画面1ステップで順番に進みます。各ステップに「なぜ必要か」の説明付き。", "Step by step, one screen at a time. Each step explains why it's needed.")),
+		html.EscapeString(t(lang, "Guided Setup（初回導入におすすめ）", "Guided Setup (Recommended for first-time setup)")),
+		html.EscapeString(t(lang, "初回導入におすすめです。1画面1ステップで順番に進み、各ステップに『なぜ必要か』の説明があります。", "Recommended for first-time setup. Move step by step, one screen at a time, with an explanation of why each step matters.")),
 		html.EscapeString(t(lang, "Kitsu 接続 → Discord Bot → Project Setup の順に進む", "Kitsu → Discord Bot → Project Setup in order")),
 		html.EscapeString(t(lang, "次に何をすればいいか常に表示される", "Always shows what to do next")),
 		html.EscapeString(t(lang, "前のステップが完了しないと次に進めない", "Can't skip ahead until previous step is done")),
@@ -113,13 +113,13 @@ func RenderWizardEntryPage(db *gorm.DB, refreshCreds func() (kitsuHost, botToken
 		html.EscapeString(t(lang, "Guided Setup を開始 →", "Start Guided Setup →")),
 
 		// Quick Setup card
-		html.EscapeString(t(lang, "Quick Setup（経験者向け）", "Quick Setup (Advanced)")),
-		html.EscapeString(t(lang, "全条件を一覧表示。未完了の項目をその場で確認できます。", "See all conditions at a glance. Check any incomplete item directly.")),
+		html.EscapeString(t(lang, "Setup Status（状態確認）", "Setup Status (Status Overview)")),
+		html.EscapeString(t(lang, "現在のセットアップ状況と準備状態を確認します。Guided Setup の代わりではなく、状態確認用の画面です。", "Check current setup status and readiness. This does not replace Guided Setup; it is a status overview screen.")),
 		html.EscapeString(t(lang, "8つの完了条件をカードで確認", "View all 8 completion conditions as cards")),
-		html.EscapeString(t(lang, "順番なし — どこからでも着手可能", "No order — start anywhere")),
-		html.EscapeString(t(lang, "Manual Setup へのリンクで詳細設定も可能", "Links to Manual Setup for detailed configuration")),
+		html.EscapeString(t(lang, "現在どこが未完了かを確認できる", "Shows what is still incomplete right now")),
+		html.EscapeString(t(lang, "自動セットアップは行わず、必要に応じて Guided Setup や Manual Setup へ進む", "Does not perform automatic setup actions; continue to Guided Setup or Manual Setup when needed")),
 		withLang("/bot/setup-wizard?mode=quick", r),
-		html.EscapeString(t(lang, "Quick Setup を開く →", "Open Quick Setup →")),
+		html.EscapeString(t(lang, "Setup Status を開く →", "Open Setup Status →")),
 	)
 	return adminPage(lang, t(lang, "KitsuSync セットアップ", "KitsuSync Setup"), r, body)
 }
@@ -193,8 +193,8 @@ func RenderQuickSetupPage(db *gorm.DB, refreshCreds func() (kitsuHost, botToken,
   <h3>%s</h3>
   <div class="setup-grid">%s</div>
 </div>`,
-		html.EscapeString(t(lang, "Quick Setup", "Quick Setup")),
-		html.EscapeString(t(lang, "全ての完了条件を一覧で確認できます。", "View all setup completion conditions at a glance.")),
+		html.EscapeString(t(lang, "Setup Status", "Setup Status")),
+		html.EscapeString(t(lang, "現在のセットアップ状況と準備状態を一覧で確認できます。", "Check current setup status and readiness at a glance.")),
 		withLang("/bot/setup-wizard", r),
 		html.EscapeString(t(lang, "← Entry", "← Entry")),
 		withLang("/bot/admin/setup", r),
@@ -213,5 +213,5 @@ func RenderQuickSetupPage(db *gorm.DB, refreshCreds func() (kitsuHost, botToken,
 		html.EscapeString(t(lang, "テスト通知", "Test Notification")),
 		renderCheckCard(lang, diag.TestNotification),
 	)
-	return adminPage(lang, t(lang, "Quick Setup", "Quick Setup"), r, body)
+	return adminPage(lang, t(lang, "Setup Status", "Setup Status"), r, body)
 }
