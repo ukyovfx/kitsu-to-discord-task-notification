@@ -25,7 +25,7 @@ The safest next step is not a flow rewrite. The safest next step is to align the
 - Evidence:
   - README.md says /bot/setup-wizard is a guided 4-step first-time setup.
   - docs/QUICK_START.md says The wizard walks you through 4 steps.
-  - src/setup/quick_setup.go renders an entry page with two modes: Guided Setup and Quick Setup.
+  - At the time of this review, `src/setup/quick_setup.go` rendered an entry page with two modes: Guided Setup and Quick Setup.
   - src/setup/guided_stepwise.go can start from System Check as step 0 when env prerequisites are missing.
 - Why this matters:
   - A first-time operator expects one linear wizard, but the actual UX starts with a mode choice and can insert a prerequisite gate before Kitsu.

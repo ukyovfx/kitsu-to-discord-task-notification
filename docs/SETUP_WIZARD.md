@@ -18,7 +18,7 @@ If you are starting from a clean clone, the intended operator path is:
 
 The current implementation uses the guided/manual diagnostics model. A first-time operator may see three layers:
 
-1. An entry chooser (`Guided Setup` or `Quick Setup`)
+1. An entry chooser (`Guided Setup` or `Setup Status`)
 2. A `System Check` gate if required env/config values are still missing
 3. The guided setup stages for Kitsu, Discord, Project Setup, and optional Mapping
 
@@ -26,7 +26,7 @@ The table below is still useful as a mental model, but the live product is not a
 
 | Stage | Required | What it does |
 |------|----------|--------------------|
-| Entry chooser | Contextual | Lets the operator pick Guided Setup or Quick Setup |
+| Entry chooser | Contextual | Lets the operator pick Guided Setup or Setup Status |
 | System Check | When needed | Stops early if required env/config values are missing |
 | Kitsu Connection | ✅ Yes | Tests Kitsu hostname, reachability, and authentication |
 | Discord Bot | ✅ Yes | Tests bot token, Guild ID, and permissions |
@@ -34,6 +34,8 @@ The table below is still useful as a mental model, but the live product is not a
 | User & Checker Mapping | Optional | Adds @mention routing for users and reviewers |
 
 The wizard pre-populates stages from the current system state. If Kitsu and Discord are already configured, Guided Setup may open directly at Project Setup or Mapping.
+
+`Setup Status` is the readiness/status overview surface. It shows current setup state and missing items, but it does not replace Guided Setup and does not perform setup actions on its own. The compatible route remains `?mode=quick`, even though the visible UI label is now `Setup Status`.
 
 ---
 
