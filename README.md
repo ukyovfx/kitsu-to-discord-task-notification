@@ -120,8 +120,8 @@ diagrams/                 Supporting docs assets
 ### 1. Clone and prepare config
 
 ```bash
-git clone https://github.com/YOUR_ORG/kitsusync.git
-cd kitsusync
+git clone https://github.com/ukyovfx/kitsu-to-discord-task-notification.git
+cd kitsu-to-discord-task-notification
 cp .env.example .env.local
 cp conf.toml.example conf.toml
 mkdir -p data

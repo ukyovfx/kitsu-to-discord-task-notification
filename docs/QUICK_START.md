@@ -23,8 +23,8 @@ Before you begin, confirm you have:
 ## Step 1 — Clone and configure
 
 ```bash
-git clone https://github.com/YOUR_ORG/kitsusync.git
-cd kitsusync
+git clone https://github.com/ukyovfx/kitsu-to-discord-task-notification.git
+cd kitsu-to-discord-task-notification
 cp .env.example .env.local
 ```
 
