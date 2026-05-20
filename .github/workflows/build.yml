@@ -1,10 +1,10 @@
-name: Build
+name: CI
 
 on:
   push:
-    branches: ["master", "main"]
+    branches: [master]
   pull_request:
-    branches: ["master", "main"]
+    branches: [master]
 
 jobs:
   build:
@@ -16,10 +16,10 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: "1.21"
+          go-version: 1.21
 
       - name: Install SQLite build dependencies
-        run: sudo apt-get install -y gcc libsqlite3-dev
+        run: sudo apt-get update && sudo apt-get install -y gcc libsqlite3-dev
 
       - name: go vet
         run: CGO_ENABLED=1 go vet ./src/...
@@ -27,5 +27,8 @@ jobs:
       - name: go test
         run: CGO_ENABLED=1 go test ./src/... -count=1 -timeout=120s
 
-      - name: Build
-        run: CGO_ENABLED=1 go build -o kitsu-discord ./src
+      - name: Docker Compose config
+        run: docker compose config -q
+
+      - name: Docker Compose build app
+        run: docker compose build app
