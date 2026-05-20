@@ -1,6 +1,6 @@
 # Setup Wizard Reference
 
-The Setup Wizard (`/bot/setup-wizard`) is the recommended first-time entry point for v0.1.0. It may open with a small entry chooser before Guided Setup begins. Admin-first setup is also available through `/bot/admin/setup`, which shows the same diagnostics in a manual checklist view. Both paths end at the same rule: one project, one guild, and one successful test notification.
+The Setup Wizard (`/bot/setup-wizard`) is the recommended first-time entry point for v0.1.0. It may open with a small entry chooser before Guided Setup begins. Manual setup / repair support is also available through `/bot/admin/setup`, which shows the same diagnostics in a manual checklist view. Both paths end at the same rule: one project, one guild, and one successful test notification.
 
 If you are starting from a clean clone, the intended operator path is:
 
@@ -10,7 +10,7 @@ If you are starting from a clean clone, the intended operator path is:
 4. Open `/bot/admin/setup` to review the common diagnostics
 5. Set shared bot credentials in `/bot/admin/bot`
 6. Assign `project -> guild` in `/bot/admin/projects`
-7. Continue into `/bot/setup-wizard` if needed
+7. Continue into `/bot/setup-wizard` for the recommended first-time guided path if needed
 
 ---
 
@@ -199,7 +199,7 @@ Once the wizard completes, the **Dashboard** (`/bot/admin`) shows:
 
 | Task | Where |
 |------|-------|
-| Add or remove channels for a project | `/bot/setup` — manage individual channels |
+| Add or remove channels for a project | `/bot/setup` — project/channel management after initial setup or for manual edits |
 | Edit user/checker mappings | `/bot/admin/users`, `/bot/admin/checkers` |
 | Reconnect a broken webhook | `/bot/admin/health` → Reconnect button |
 | Add a second project | Run the wizard again at `/bot/setup-wizard` |

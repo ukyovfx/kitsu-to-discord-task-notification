@@ -851,24 +851,24 @@ func renderForm(r *http.Request, projects []model.Project, kitsuProjects []Kitsu
 			}
 			return "active"
 		}(),
-		t(lang, "Bot 設定", "Bot Setup"),
+		t(lang, "共有Bot / Runtime 設定", "Shared Bot / Runtime"),
 		func() string {
 			if step1Done {
 				return "active"
 			}
 			return "pending"
 		}(),
-		t(lang, "プロジェクト設定", "Project Setup"),
+		t(lang, "プロジェクト管理", "Project Management"),
 	)
 
 	var botCard strings.Builder
 	if step1Done {
-		botCard.WriteString(`<div class="section-card glass">` + stepIndicator + `<h3>` + t(lang, "✅ Bot設定は完了しています", "✅ Bot setup complete") + `</h3><p class="hint">` + t(lang, "Botアカウントは準備済みです。メールアドレスは非表示です。", "The bot account is already prepared. The email is intentionally hidden.") + `</p><div class="metric-grid"><div class="metric-card"><div class="metric-label">Kitsu hostname</div><div class="metric-value metric-value-host"><code>` + esc(kitsuHostStored) + `</code></div></div></div></div>`)
+		botCard.WriteString(`<div class="section-card glass">` + stepIndicator + `<h3>` + t(lang, "✅ 共有Bot / Runtime 設定は完了しています", "✅ Shared bot / runtime setup complete") + `</h3><p class="hint">` + t(lang, "共有Bot / runtime 設定は準備済みです。メールアドレスは非表示です。", "Shared bot / runtime setup is already prepared. The email is intentionally hidden.") + `</p><div class="metric-grid"><div class="metric-card"><div class="metric-label">Kitsu hostname</div><div class="metric-value metric-value-host"><code>` + esc(kitsuHostStored) + `</code></div></div></div></div>`)
 	} else {
-		botCard.WriteString(`<div class="section-card glass">` + stepIndicator + `<h3>` + t(lang, "Step 1: Bot 初期設定", "Step 1: Bot initial setup") + `</h3>` +
+		botCard.WriteString(`<div class="section-card glass">` + stepIndicator + `<h3>` + t(lang, "Step 1: 共有Bot / Runtime 設定", "Step 1: Shared bot / runtime setup") + `</h3>` +
 			`<div class="notice-box">💡 ` + t(lang, "あなたの管理者アカウント: <strong>初回確認のみに使用</strong>、保存されません。", "Your admin account: used <strong>only for initial verification</strong>, not saved.") + `</div>` +
-			`<p class="hint">` + t(lang, "Kitsu hostname は現在の公開ホストから自動設定されます。ここではスタジオ管理者アカウントのみ入力してください。", "Kitsu hostname is detected from the current public host. Only the studio admin account is needed here.") + `</p>` +
-			`<p class="hint">` + t(lang, "KitsuSync Bot を作成します", "Create KitsuSync Bot") + `<br><small>` + t(lang, "✓ Kitsu のタスク更新を監視\n✓ Discord へ通知を送信\n✗ Kitsu を変更しません\n✗ Discord を管理しません", "✓ Monitor Kitsu task updates\n✓ Send Discord notifications\n✗ Does not modify Kitsu\n✗ Does not manage Discord") + `</small></p>` +
+			`<p class="hint">` + t(lang, "この画面は first-time wizard の代わりではなく、手動サポート用の setup surface です。Kitsu hostname は現在の公開ホストから自動設定され、ここでは共有Bot / runtime 用の初期準備を行います。", "This screen is a manual support/setup surface, not a replacement for the first-time wizard. The Kitsu hostname is detected from the current public host, and this section prepares the shared bot / runtime setup.") + `</p>` +
+			`<p class="hint">` + t(lang, "共有Bot / Runtime を準備します", "Prepare shared bot / runtime setup") + `<br><small>` + t(lang, "✓ Kitsu のタスク更新を監視\n✓ Discord へ通知を送信\n✗ Kitsu を変更しません\n✗ Discord を管理しません", "✓ Monitor Kitsu task updates\n✓ Send Discord notifications\n✗ Does not modify Kitsu\n✗ Does not manage Discord") + `</small></p>` +
 			`<div class="metric-grid"><div class="metric-card"><div class="metric-label">Detected host</div><div class="metric-value metric-value-host"><code>` + esc(detectedHost) + `</code></div></div></div>` +
 			`<form method="POST" class="section-stack" onsubmit="startBotSetup(this)"><input type="hidden" name="action" value="bot_setup"><div class="form-grid"><div><label>` + t(lang, "スタジオ管理者メール", "Studio admin email") + `</label><input type="email" name="bot_admin_email" placeholder="admin@studio.local" required></div><div><label>` + t(lang, "スタジオ管理者パスワード", "Studio admin password") + `</label><input type="password" name="bot_admin_password" placeholder="Password" required></div></div><div class="button-row"><button type="submit" class="btn" id="botSetupBtn">` + t(lang, "Botアカウントを作成", "Create bot account") + `</button></div></form></div>`)
 	}
@@ -998,10 +998,10 @@ document.addEventListener('DOMContentLoaded', function(){
 </script>`,
 		botCard.String(),
 		sotBadge,
-		t(lang, "設定済みプロジェクト", "Configured Projects"),
+		t(lang, "設定済みプロジェクト / チャンネル管理", "Configured Projects / Channel Management"),
 		projectCards.String(),
-		t(lang, "新規プロジェクトセットアップ", "New Project Setup"),
-		t(lang, "プロジェクトを選択するとDiscordカテゴリとチャンネルを作成します。", "Select a project to generate its Discord category and channels."),
+		t(lang, "新規プロジェクトのルーティング作成", "Create New Project Routing"),
+		t(lang, "ここでは project ごとの Discord category / channels / webhooks を管理します。初回導入では Setup Wizard を先に進めるのがおすすめです。", "Manage Discord category / channels / webhooks per project here. For first-time setup, we recommend going through the Setup Wizard first."),
 		t(lang, "Kitsuプロジェクト", "Kitsu project"),
 		projectOptions.String(),
 		t(lang, "プロジェクトタイプ", "Project type"),
@@ -1014,7 +1014,7 @@ document.addEventListener('DOMContentLoaded', function(){
 		t(lang, "Botアカウント設定中...", "Bot account setup..."),
 		t(lang, "設定中...", "Setting up..."),
 	)
-	return adminPage(lang, t(lang, "プロジェクト設定", "Project Setup"), r, body)
+	return adminPage(lang, t(lang, "プロジェクト管理", "Project Management"), r, body)
 }
 
 func renderResult(lang, projectName string, result SetupResult, r *http.Request) string {
@@ -1045,9 +1045,9 @@ func renderResult(lang, projectName string, result SetupResult, r *http.Request)
 		footer = `<p style="text-align:center;color:var(--muted);font-size:.84rem;margin-bottom:6px">` +
 			esc(t(lang, "✅ KitsuSync の接続のみ削除します（Discord channel はそのまま残ります）", "✅ Only KitsuSync connection is deleted (Discord channels will remain)")) + `</p>` +
 			`<p style="text-align:center;color:#b8b5ae;font-size:.9rem;margin-bottom:12px">` +
-			esc(t(lang, "5秒後にProject Setupへ戻ります。", "Returning to Project Setup in 5 seconds.")) + `</p>` +
+			esc(t(lang, "5秒後にProject Managementへ戻ります。", "Returning to Project Management in 5 seconds.")) + `</p>` +
 			`<div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;">` +
-			`<a href="` + backURL + `" class="btn">` + esc(t(lang, "Project Setupへ", "Back to Setup")) + `</a>` +
+			`<a href="` + backURL + `" class="btn">` + esc(t(lang, "Project Managementへ", "Back to Project Management")) + `</a>` +
 			deleteForm + `</div>` +
 			`<script>setTimeout(function(){location.href=` + strconv.Quote(backURL) + `;},5000);</script>`
 	} else {
@@ -1128,7 +1128,7 @@ func renderResult(lang, projectName string, result SetupResult, r *http.Request)
 	}
 
 	sub := projectName + durationNote
-	body := fmt.Sprintf(`<div class="page-card glass" style="width:100%%;max-width:760px;margin:6vh auto 0"><div class="page-heading"><div><div class="eyebrow">Project Setup</div><h1 style="color:%s">%s</h1><p>%s</p></div></div><div class="section-card glass">%s<div class="setup-inventory">%s</div></div><div class="button-row">%s</div></div>`,
+	body := fmt.Sprintf(`<div class="page-card glass" style="width:100%%;max-width:760px;margin:6vh auto 0"><div class="page-heading"><div><div class="eyebrow">Project Management</div><h1 style="color:%s">%s</h1><p>%s</p></div></div><div class="section-card glass">%s<div class="setup-inventory">%s</div></div><div class="button-row">%s</div></div>`,
 		color, esc(title), sub, retryBadge, inventoryHTML.String(), footer)
 	return appShell("KitsuSync", "", lang, nil, "", body)
 }
@@ -1158,7 +1158,7 @@ func renderDeleteReauthPage(lang, pid, projectName string, r *http.Request) stri
 		`</div></form>`
 	body := fmt.Sprintf(
 		`<div class="page-card glass" style="width:100%%;max-width:760px;margin:6vh auto 0">`+
-			`<div class="page-heading"><div><div class="eyebrow">Project Setup</div>`+
+			`<div class="page-heading"><div><div class="eyebrow">Project Management</div>`+
 			`<h1 style="color:#ff6a50">%s</h1></div></div>`+
 			`<div class="section-card glass">%s%s</div></div>`,
 		esc(t(lang, "プロジェクト削除の確認", "Confirm project deletion")),
@@ -1181,7 +1181,7 @@ func page(lang, title, color, sub, listItems, footer string) string {
 }
 
 func renderBotSetupSuccess(lang string) string {
-	return page(lang, t(lang, "Bot設定完了", "Bot Setup Complete"), "#8ecf8b", t(lang, "Botアカウントを作成し、実行環境へ適用しました。", "The bot account was created and applied to the running environment."), `<li>`+esc(t(lang, "次はProject Setupでプロジェクトを設定してください。", "Continue in Project Setup to configure projects."))+`</li>`, `<a href="`+appendLang("/bot/setup", lang)+`">`+t(lang, "Project Setupへ戻る", "Back to Project Setup")+`</a>`)
+	return page(lang, t(lang, "Bot設定完了", "Bot Setup Complete"), "#8ecf8b", t(lang, "Botアカウントを作成し、実行環境へ適用しました。", "The bot account was created and applied to the running environment."), `<li>`+esc(t(lang, "次は Project Management で project routing を設定してください。", "Continue in Project Management to configure project routing."))+`</li>`, `<a href="`+appendLang("/bot/setup", lang)+`">`+t(lang, "Project Managementへ戻る", "Back to Project Management")+`</a>`)
 }
 
 func renderBotSetupError(lang, errMsg string) string {
