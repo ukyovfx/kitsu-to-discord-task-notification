@@ -19,7 +19,7 @@ If you are starting from a clean clone, the intended operator path is:
 The current implementation uses the guided/manual diagnostics model. A first-time operator may see three layers:
 
 1. An entry chooser where `Guided Setup` is recommended first, with `Setup Status` available as a secondary overview
-2. A `System Check` gate if required env/config values are still missing
+2. A `System Check` preflight if required env/config values are still missing
 3. The guided setup stages for Kitsu, Discord, Project Setup, and optional Mapping
 
 The table below is still useful as a mental model, but the live product is not always a direct 4-step flow from the first page load.
@@ -27,13 +27,13 @@ The table below is still useful as a mental model, but the live product is not a
 | Stage | Required | What it does |
 |------|----------|--------------------|
 | Entry chooser | Contextual | Recommends Guided Setup for first-time setup and keeps Setup Status available for status overview |
-| System Check | When needed | Stops early if required env/config values are missing |
+| System Check | When needed | Acts as Guided Setup preflight and pauses intentionally if required env/config values are missing |
 | Kitsu Connection | ✅ Yes | Tests Kitsu hostname, reachability, and authentication |
 | Discord Bot | ✅ Yes | Tests bot token, Guild ID, and permissions |
 | Project Setup | ✅ Yes | Previews and then creates Discord channels/webhooks for one Kitsu project |
 | User & Checker Mapping | Optional | Adds @mention routing for users and reviewers |
 
-The wizard pre-populates stages from the current system state. If Kitsu and Discord are already configured, Guided Setup may open directly at Project Setup or Mapping.
+The wizard pre-populates stages from the current system state. If required values are missing, System Check appears first on purpose so you can fix blockers before moving deeper into Guided Setup. If Kitsu and Discord are already configured, Guided Setup may open directly at Project Setup or Mapping.
 
 `Guided Setup` is the recommended first-time path. `Setup Status` is the readiness/status overview surface. It shows current setup state and missing items, but it does not replace Guided Setup and does not perform setup actions on its own. The compatible route remains `?mode=quick`, even though the visible UI label is now `Setup Status`.
 

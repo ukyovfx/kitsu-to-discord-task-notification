@@ -122,6 +122,12 @@ ignoreMessagesDaysOld = 14
 
 ## Setup Wizard Failures (/bot/setup-wizard)
 
+### Wizard opens at System Check first
+
+This is the Guided Setup preflight, not a broken wizard state. KitsuSync pauses here intentionally when required environment or shared setup values are still missing.
+
+Start with the blocking items shown in the UI. Depending on the item, the fix may live in `.env.local`, `/bot/admin/bot`, or `/bot/admin/setup`. If you changed `.env.local`, restart the app container before reloading the wizard.
+
 ### Step 1 (Kitsu) reports "server not reachable"
 
 The app container cannot reach the Kitsu server.

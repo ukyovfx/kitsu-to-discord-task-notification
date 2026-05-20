@@ -557,6 +557,7 @@ func renderActiveStepBody(lang string, diag SetupDiagnostics, currentStep int, d
 		return fmt.Sprintf(`
 <section class="guided-step active">
   <div class="guided-head"><div><h3>%s</h3><p class="guided-note">%s</p></div><div class="guided-pill">active</div></div>
+  <div class="guided-banner ok" style="margin-top:12px">%s</div>
   <div style="margin-top:14px">%s</div>
   <div class="guided-banner warn" style="margin:12px 0">%s</div>
   <div class="guided-actions" style="margin-top:14px">
@@ -565,16 +566,17 @@ func renderActiveStepBody(lang string, diag SetupDiagnostics, currentStep int, d
   </div>
 </section>`,
 			html.EscapeString(t(lang, "Step 0: システム確認", "Step 0: System Check")),
-			html.EscapeString(t(lang, "セットアップを始める前に、必要な環境変数が揃っているか確認します。", "Before starting setup, confirm that required environment variables are in place.")),
+			html.EscapeString(t(lang, "Guided Setup を安全に始めるための preflight です。必要な設定が足りない間はここで止まりますが、wizard が壊れているわけではありません。", "This is the Guided Setup preflight. It pauses here intentionally until the required settings are in place, so this does not mean the wizard is broken.")),
+			html.EscapeString(t(lang, "下の項目が現在のブロッカーです。各項目を埋めてから Guided Setup に戻ってください。", "These items are what currently block Guided Setup. Fill them in, then return here to continue.")),
 			envErrors.String(),
 			html.EscapeString(t(lang,
-				"修正方法: プロジェクトルートの `.env.local` ファイルを編集し、`docker compose restart` で再起動してください。変更はコンテナ再起動後に反映されます。",
-				"Fix: Edit `.env.local` in the project root, then run `docker compose restart`. Changes take effect after the container restarts.",
+				"修正先は内容によって異なります。.env.local の環境設定、または admin setup pages（例: Bot Settings / Manual Setup）を確認してください。.env.local を変えた場合は `docker compose restart` 後に反映されます。",
+				"Fixes may live in different places. Check `.env.local` for environment settings, or use the admin setup pages such as Bot Settings / Manual Setup when appropriate. If you change `.env.local`, run `docker compose restart` before returning to Guided Setup.",
 			)),
 			withLang("/bot/admin/diagnostics", r),
 			html.EscapeString(t(lang, "診断ページを開く", "Open Diagnostics")),
 			withLang("/bot/admin/setup", r),
-			html.EscapeString(t(lang, "Manual Setup を開く", "Open Manual Setup")),
+			html.EscapeString(t(lang, "修正先を確認する", "Open Manual Setup")),
 		)
 	case 1:
 		envNotice := ""
