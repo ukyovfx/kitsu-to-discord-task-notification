@@ -610,7 +610,7 @@ func renderActiveStepBody(lang string, diag SetupDiagnostics, currentStep int, d
   <div id="guidedStep1Result" class="guided-result hidden"></div>
 </section>`,
 			html.EscapeString(t(lang, "Step 1: Kitsu Connection", "Step 1: Kitsu Connection")),
-			html.EscapeString(t(lang, "Kitsuのタスク変更を検知するために認証が必要です。メールアドレスとパスワードを入力して接続テストしてください。", "Authentication is required so KitsuSync can detect task changes. Enter your email and password, then test the connection.")),
+			html.EscapeString(t(lang, "セットアップでは Kitsu に接続できる資格情報を使って確認します。長期運用では dedicated な KitsuSync / runtime account を使うのが望ましく、個人の管理者アカウントを常用する場合は意図的に選んでください。", "Setup checks Kitsu access using credentials that can log in to Kitsu. For ongoing polling, a dedicated KitsuSync/runtime account is preferred when possible. Avoid relying on a personal admin account for long-term operation unless you intentionally choose to do so.")),
 			html.EscapeString(stepBadgeText(lang, diag.Kitsu.Status)),
 			envNotice,
 			html.EscapeString(t(lang, "Kitsu ホスト（自動検出）", "Kitsu Host (auto-detected)")),
@@ -618,7 +618,7 @@ func renderActiveStepBody(lang string, diag SetupDiagnostics, currentStep int, d
 			html.EscapeString(detectedHost),
 			html.EscapeString(t(lang, "Kitsu ホスト", "Kitsu Host")),
 			html.EscapeString(detectedHost),
-			html.EscapeString(t(lang, "メールアドレス（Kitsu 管理者）", "Email (Kitsu admin)")),
+			html.EscapeString(t(lang, "メールアドレス（Kitsuアクセス確認用）", "Email (for Kitsu access check)")),
 			html.EscapeString(t(lang, "パスワード", "Password")),
 			html.EscapeString(t(lang, "接続テスト", "Test Connection")),
 		)
