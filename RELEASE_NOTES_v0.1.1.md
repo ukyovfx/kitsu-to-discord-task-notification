@@ -2,7 +2,7 @@
 
 ## Overview
 
-v0.1.1 is a post-release hardening follow-up to 0.1.0.
+v0.1.1 is a post-release hardening follow-up to v0.1.0.
 
 This release improves repository safety, CI coverage, public onboarding clarity, and project policy documentation. It does **not** expand runtime behavior or change the core Kitsu -> Discord application flow.
 
@@ -31,7 +31,7 @@ This release improves repository safety, CI coverage, public onboarding clarity,
 
 ### Repository policy notes
 
-- Added a historical tag policy for inherited non- tags
+- Added a historical tag policy for inherited non-v tags
 - Added a branding policy for the relationship between the public name KitsuSync and the historical repository slug kitsu-to-discord-task-notification
 - Added a v0.1.1 release readiness note documenting why this release is considered safe to ship as a hardening/docs/policy release
 
@@ -46,7 +46,7 @@ This release improves repository safety, CI coverage, public onboarding clarity,
 - v0.1.1 does not change setup/auth/runtime/API/Docker/DB behavior
 - Setup wizard trust gaps were reduced in docs, but not fully solved in-product
 - Branch protection and ruleset behavior should still be monitored over time
-- Historical non- tags remain in place for now by policy
+- Historical non-v tags remain in place for now by policy
 - Repository slug and public product name remain intentionally different for now
 
 ## Notes for users upgrading from v0.1.0
