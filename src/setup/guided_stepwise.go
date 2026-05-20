@@ -280,8 +280,8 @@ func RenderGuidedSetupPageStepwise(db *gorm.DB, refreshCreds func() (kitsuHost, 
             summary += '<div class="guided-field"><strong>%s</strong><div>' + esc(applyData.discord_server_name || data.discord_server_name || applyData.guild_id || '') + '</div></div>';
             summary += '<div class="guided-field"><strong>%s</strong><div>' + esc(String(applyData.channels_created || 0)) + '</div></div>';
             summary += '<div class="guided-field"><strong>%s</strong><div>' + esc(String(applyData.webhooks_created || 0)) + '</div></div>';
-            summary += '<div class="guided-field"><strong>%s</strong><div>' + esc(applyData.safe_to_retry ? 'yes' : 'no') + '</div></div>';
             summary += '</div>';
+            summary += '<div class="guided-banner ' + (applyData.safe_to_retry ? 'ok' : 'warn') + '" style="margin-top:12px"><strong>%s</strong><div class="guided-note" style="margin-top:6px">' + esc(applyData.safe_to_retry ? %s : %s) + '</div></div>';
             if((applyData.channels_created || 0) !== (data.channels_to_create || []).length || (applyData.webhooks_created || 0) !== (data.webhooks_to_create || 0)){
               summary += '<div class="guided-banner warn">%s</div>';
             }
@@ -387,7 +387,9 @@ func RenderGuidedSetupPageStepwise(db *gorm.DB, refreshCreds func() (kitsuHost, 
 		esc(t(lang, "Discord Server", "Discord Server")),
 		esc(t(lang, "Channels created", "Channels created")),
 		esc(t(lang, "Webhooks created", "Webhooks created")),
-		esc(t(lang, "Safe to retry", "Safe to retry")),
+		esc(t(lang, "再試行の案内", "Retry guidance")),
+		t(lang, "この setup step は再試行できます。KitsuSync は手動 cleanup が必要な状態を検出していません。必要に応じて結果だけ確認してからもう一度実行してください。", "You can retry this setup step. KitsuSync did not detect a condition that requires manual Discord cleanup first. If needed, review the result and run it again."),
+		t(lang, "再試行する前に Discord を手動で確認してください。途中で作成された channel や webhook が残っていれば、残すべきでないものを削除してからやり直してください。", "Before retrying, check Discord manually. If partially-created channels or webhooks remain, remove anything that should not stay before you run setup again."),
 		esc(t(lang, "Preview と execute の結果に差がありました。execute の結果を正として表示しています。", "Preview and execute differed. Showing the execute result as the source of truth.")),
 		esc(t(lang, "Project setup execution failed.", "Project setup execution failed.")),
 		esc(t(lang, "Raw details", "Raw details")),
