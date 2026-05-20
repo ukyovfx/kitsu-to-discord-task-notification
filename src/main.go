@@ -924,13 +924,18 @@ func main() {
 	registerAdminRoutes("")
 	registerAdminRoutes("/bot")
 
-	mux.HandleFunc("/docs", func(w http.ResponseWriter, r *http.Request) {
+	serveDocsHTML := func(w http.ResponseWriter, r *http.Request) {
 		http.ServeFile(w, r, "./docs.html")
-	})
-	mux.HandleFunc("/site.jsx", func(w http.ResponseWriter, r *http.Request) {
+	}
+	serveDocsJSX := func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/javascript; charset=utf-8")
 		http.ServeFile(w, r, "./site.jsx")
-	})
+	}
+	mux.HandleFunc("/docs", serveDocsHTML)
+	mux.HandleFunc("/bot/docs", serveDocsHTML)
+	mux.HandleFunc("/bot/docs/", serveDocsHTML)
+	mux.HandleFunc("/site.jsx", serveDocsJSX)
+	mux.HandleFunc("/bot/docs/site.jsx", serveDocsJSX)
 	mux.Handle("/diagrams/", http.StripPrefix("/diagrams/", http.FileServer(http.Dir("./diagrams/"))))
 
 	server := &http.Server{
@@ -938,7 +943,7 @@ func main() {
 		Handler: mux,
 	}
 	go func() {
-		slog.Info("HTTP server listening on :8090  (/health, /login, /setup, /admin/*, /docs)")
+		slog.Info("HTTP server listening on :8090  (/health, /login, /setup, /admin/*, /docs, /bot/docs/)")
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			slog.Error("HTTP server failed", "err", err)
 		}
