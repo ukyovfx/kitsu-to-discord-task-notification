@@ -42,7 +42,7 @@ func RenderWizardEntryPage(db *gorm.DB, refreshCreds func() (kitsuHost, botToken
 			withLang("/bot/admin", r),
 			html.EscapeString(t(lang, "Admin へ", "Go to Admin")),
 			withLang("/bot/admin/setup", r),
-			html.EscapeString(t(lang, "Manual Setup", "Manual Setup")),
+			html.EscapeString(t(lang, "Manual Setup / Diagnostics", "Manual Setup / Diagnostics")),
 		)
 		return adminPage(lang, t(lang, "セットアップ完了", "Setup Complete"), r, body)
 	}
@@ -198,7 +198,7 @@ func RenderQuickSetupPage(db *gorm.DB, refreshCreds func() (kitsuHost, botToken,
 		withLang("/bot/setup-wizard", r),
 		html.EscapeString(t(lang, "← Entry", "← Entry")),
 		withLang("/bot/admin/setup", r),
-		html.EscapeString(t(lang, "Manual Setup →", "Manual Setup →")),
+		html.EscapeString(t(lang, "Manual Setup / Diagnostics →", "Manual Setup / Diagnostics →")),
 		withLang("/bot/setup-wizard?mode=guided", r),
 		html.EscapeString(t(lang, "Guided Setup →", "Guided Setup →")),
 		summaryClass,

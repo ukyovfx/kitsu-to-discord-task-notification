@@ -69,7 +69,7 @@ KITSU_RUNTIME_PASSWORD=yourpassword
 DISCORD_BOT_TOKEN=your-bot-token            # From Discord Developer Portal (Part 2)
 DISCORD_GUILD_ID=optional-fallback-server-id  # Optional fallback only
 
-DISCORD_WEBHOOK_URL=                        # Leave blank for now; set up via /bot/setup
+DISCORD_WEBHOOK_URL=                        # Leave blank for now; set up later via project management if needed
 ```
 
 ### Review `conf.toml`
@@ -131,9 +131,9 @@ For first-time setup, start at `/bot/setup-wizard` after login. The first screen
 3. Use `/bot/admin/bot` to save shared bot/runtime credentials when prompted.
 4. Use `/bot/admin/projects` to assign a Discord Guild ID per Kitsu project.
 
-### Step 3: Project Setup (`/bot/setup-wizard` recommended, `/bot/setup` for direct management)
+### Step 3: Project Setup (`/bot/setup-wizard` recommended, `/bot/setup` for project/channel management)
 
-This stage handles Discord resource creation for one Kitsu project.
+This stage handles Discord resource creation for one Kitsu project. `/bot/setup-wizard` is the recommended first-time path; `/bot/setup` remains available for direct project/channel management and manual follow-up work.
 
 1. Select a Kitsu project from the dropdown.
 2. Confirm the target Discord Server / Guild assignment.

@@ -253,7 +253,7 @@ func AdminIndex(db *gorm.DB) http.HandlerFunc {
 		initialSetupCard := `<div class="section-card glass"><h3>` + esc(t(lang, "Initial Setup", "Initial Setup")) + `</h3><ol class="hint" style="margin:8px 0 0 18px;line-height:1.6">` +
 			`<li>` + esc(t(lang, "Bot設定で共有Botトークンを登録", "Register shared bot token in Bot Settings")) + `</li>` +
 			`<li>` + esc(t(lang, "Projects & Guilds で production ごとに Guild ID を割り当て", "Assign a Guild ID per production in Projects & Guilds")) + `</li>` +
-			`<li>` + esc(t(lang, "Project Setup でチャンネルとWebhookを作成", "Create channels and webhooks from Project Setup")) + `</li>` +
+			`<li>` + esc(t(lang, "Project Management でチャンネルとWebhookを管理", "Manage channels and webhooks from Project Management")) + `</li>` +
 			`<li>` + esc(t(lang, "Health/Diagnostics で権限と接続を確認", "Validate permissions and connectivity in Health/Diagnostics")) + `</li>` +
 			`</ol></div>`
 
@@ -310,7 +310,7 @@ func AdminProjectsHandler(db *gorm.DB, fallbackGuildID string) http.HandlerFunc 
 			))
 		}
 		if blocks.Len() == 0 {
-			blocks.WriteString(emptyState("\U0001F5C2", t(lang, "まだプロジェクトがありません", "No projects configured yet."), t(lang, "先に Project Setup を実行してください。", "Run Project Setup first.")))
+			blocks.WriteString(emptyState("\U0001F5C2", t(lang, "まだプロジェクトがありません", "No projects configured yet."), t(lang, "先に Setup Wizard を進め、その後 Project Management を開いてください。", "Run Project Management after the Setup Wizard first.")))
 		}
 		body := `<div class="section-stack"><div class="section-card glass"><p class="hint">` + esc(t(lang, "1つのBotを複数Guildへ招待し、productionごとに Guild ID を割り当てます。", "Invite one bot to multiple guilds, then assign a guild ID per production.")) + `</p></div>` + blocks.String() + `</div>`
 		fmt.Fprint(w, adminPage(lang, t(lang, "Projects & Guilds", "Projects & Guilds"), r, body))
@@ -780,7 +780,7 @@ func DriveHandler(db *gorm.DB) http.HandlerFunc {
 				esc(project.Name), esc(project.KitsuProjectID), t(lang, "補助リンク", "Helper link"), esc(project.StorageURL), t(lang, "保存", "Save")))
 		}
 		if blocks.Len() == 0 {
-			blocks.WriteString(emptyState("📁", t(lang, "まだプロジェクトがありません", "No projects yet"), t(lang, "先に Project Setup を実行してください。", "Run project setup first.")))
+			blocks.WriteString(emptyState("📁", t(lang, "まだプロジェクトがありません", "No projects yet"), t(lang, "先に Setup Wizard を進め、その後 Project Management を開いてください。", "Run Project Management after the Setup Wizard first.")))
 		}
 		body := `<div class="section-stack"><div class="section-card glass"><p class="hint">` + t(lang, "プロジェクトごとの補助リンク（Drive など）を設定します。", "Set helper links per project (Drive, etc.).") + `</p></div>` + blocks.String() + `</div>`
 		fmt.Fprint(w, adminPage(lang, t(lang, "ストレージリンク", "Storage Links"), r, body))
@@ -856,9 +856,9 @@ func BotHandler(db *gorm.DB, kitsuReconnect func()) http.HandlerFunc {
     <div class="button-row"><a class="btn" data-edit-lock-link="1" href="%s">%s</a></div>
   </div>
 </div>`,
-			t(lang, "Bot設定", "Bot Settings"), t(lang, "接続状態と保護された設定を確認できます。", "Check connection status and protected settings."), statusClass, statusLabel, esc(effectiveHost), t(lang, "サーバーID", "Server ID"), valueStatus(guildID, lang), t(lang, "Bot Token", "Bot Token"), secretStatus(os.Getenv("DISCORD_BOT_TOKEN"), lang), withLang("/bot/admin/bot?edit=1", r), t(lang, "再認証して編集する", "Re-authenticate to edit"))
+			t(lang, "共有Bot / Runtime 設定", "Shared Bot / Runtime"), t(lang, "共有Botトークンと runtime credential の保護された設定を確認・更新できます。", "Review and update protected shared bot token and runtime credential settings."), statusClass, statusLabel, esc(effectiveHost), t(lang, "サーバーID", "Server ID"), valueStatus(guildID, lang), t(lang, "Bot Token", "Bot Token"), secretStatus(os.Getenv("DISCORD_BOT_TOKEN"), lang), withLang("/bot/admin/bot?edit=1", r), t(lang, "再認証して編集する", "Re-authenticate to edit"))
 		if !editMode {
-			fmt.Fprint(w, adminPage(lang, t(lang, "Bot設定", "Bot Settings"), r, view))
+			fmt.Fprint(w, adminPage(lang, t(lang, "共有Bot / Runtime 設定", "Shared Bot / Runtime"), r, view))
 			return
 		}
 		edit := fmt.Sprintf(`
@@ -1118,7 +1118,7 @@ func adminPage(lang, title string, r *http.Request, body string) string {
 	}
 	nav := `<div class="nav-card glass">` +
 		`<a class="nav-chip" href="` + withLang("/bot/admin", r) + `">` + t(lang, "管理", "Admin") + `</a>` +
-		`<a class="nav-chip" href="` + withLang("/bot/setup", r) + `">` + t(lang, "設定", "Setup") + `</a>` +
+		`<a class="nav-chip" href="` + withLang("/bot/setup", r) + `">` + t(lang, "Project Management", "Project Management") + `</a>` +
 		`<a class="nav-chip" href="` + withLang("/bot/docs/", r) + `">` + t(lang, "ドキュメント", "Docs") + `</a>` +
 		`<a class="nav-chip" href="` + withLang("/bot/logout", r) + `">` + t(lang, "ログアウト", "Logout") + `</a>` +
 		`</div>`

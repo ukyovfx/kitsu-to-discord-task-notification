@@ -23,7 +23,7 @@ KitsuSync helps teams that already track production in Kitsu but need Discord to
 
 - Sends Kitsu task updates to Discord without manual copy/paste.
 - Routes notifications by project, task type, or the default webhook.
-- Helps operators create Discord channels and webhooks from `/bot/setup`.
+- Helps operators create and manage project-specific Discord channels and webhooks from the browser.
 - Keeps lightweight change state in SQLite so only new changes are posted.
 
 ## Architecture
@@ -36,6 +36,7 @@ Kitsu API
 
 Browser admin UI
   -> /bot/login
+  -> /bot/setup-wizard
   -> /bot/setup
   -> /bot/admin
 ```
@@ -82,7 +83,7 @@ If you need these capabilities, keep them in roadmap planning instead of extendi
 
 - `/bot/login` — admin sign-in
 - `/bot/setup-wizard` — recommended first-time entry point; may first show a setup mode chooser and System Check
-- `/bot/setup` — direct project and channel management after initial setup or for advanced/manual edits
+- `/bot/setup` — project/channel management after initial setup or for advanced/manual edits
 - `/bot/admin` — operational dashboard: system health, active projects, warnings
 - `/bot/admin/users` — map Kitsu users to Discord IDs for @mentions
 - `/bot/admin/checkers` — map task types to reviewer Discord IDs
@@ -143,7 +144,7 @@ You have two ways to provide Kitsu runtime credentials:
 2. Guided browser setup
    - Fill only `KITSU_HOSTNAME`
    - Start the app
-   - Open `/bot/login` and create/apply the runtime bot account from `/bot/setup`
+   - Open `/bot/login` and create/apply the runtime bot account from `/bot/admin/bot` or the manual setup surfaces when needed
 
 If you want a default catch-all Discord route before project setup, also set:
 
@@ -194,7 +195,7 @@ curl http://localhost:8090/health
 - Login page: `http://localhost:8090/bot/login`
 - Docs: `http://localhost:8090/bot/docs/`
 - Setup Wizard: `http://localhost:8090/bot/setup-wizard`
-- Direct Setup: `http://localhost:8090/bot/setup`
+- Project Management: `http://localhost:8090/bot/setup`
 - Admin: `http://localhost:8090/bot/admin`
 
 ### Behind a reverse proxy
@@ -215,7 +216,7 @@ Use the public `/bot/*` paths exposed by your proxy, for example:
 4. Open `/bot/admin/projects` and assign a Discord Guild ID for each Kitsu project.
 5. In Guided Setup, connection checks test access first. Discord categories, channels, and webhooks are only created after the Project Setup confirmation step.
 6. If setup fails after partial Discord provisioning, rollback is best-effort and manual cleanup may still be required before retrying.
-7. Review routing and user mappings in `/bot/admin`, then watch polling logs such as `Connected to Kitsu`, `Got tasks`, and `Done FilterTasks`.
+7. Review routing and user mappings in `/bot/admin`. Use `/bot/setup` for project/channel management follow-up, then watch polling logs such as `Connected to Kitsu`, `Got tasks`, and `Done FilterTasks`.
 
 ## Environment Variables
 
@@ -317,7 +318,7 @@ location ~ ^/api/pictures/thumbnails/preview-files/ {
 - Check `KITSU_HOSTNAME`
 - Check `KITSU_RUNTIME_EMAIL`
 - Check `KITSU_RUNTIME_PASSWORD`
-- Or complete Bot Setup from `/bot/setup`
+- Or complete shared bot/runtime setup from `/bot/admin/bot` or the manual setup surfaces
 
 ### Notifications are not arriving
 
