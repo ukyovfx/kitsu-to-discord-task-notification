@@ -98,14 +98,14 @@ func RenderWizardEntryPage(db *gorm.DB, refreshCreds func() (kitsuHost, botToken
 
 </div>`,
 		html.EscapeString(t(lang, "KitsuSync セットアップ", "KitsuSync Setup")),
-		html.EscapeString(t(lang, "どちらのモードで進めますか？", "How would you like to proceed?")),
+		html.EscapeString(t(lang, "まずは Guided Setup から始めるのがおすすめです。", "We recommend starting with Guided Setup for first-time setup.")),
 		html.EscapeString(t(lang, "初回セットアップ", "First-time setup")),
 		summaryClass,
 		html.EscapeString(summaryText),
 
 		// Guided Setup card
-		html.EscapeString(t(lang, "Guided Setup（初回導入におすすめ）", "Guided Setup (Recommended for first-time setup)")),
-		html.EscapeString(t(lang, "初回導入におすすめです。1画面1ステップで順番に進み、各ステップに『なぜ必要か』の説明があります。", "Recommended for first-time setup. Move step by step, one screen at a time, with an explanation of why each step matters.")),
+		html.EscapeString(t(lang, "Guided Setup（おすすめ）", "Guided Setup (Recommended)")),
+		html.EscapeString(t(lang, "初回導入ではこちらがおすすめです。1画面1ステップで順番に進み、各ステップに『なぜ必要か』の説明があります。", "Recommended for first-time setup. Move step by step, one screen at a time, with an explanation of why each step matters.")),
 		html.EscapeString(t(lang, "Kitsu 接続 → Discord Bot → Project Setup の順に進む", "Kitsu → Discord Bot → Project Setup in order")),
 		html.EscapeString(t(lang, "次に何をすればいいか常に表示される", "Always shows what to do next")),
 		html.EscapeString(t(lang, "前のステップが完了しないと次に進めない", "Can't skip ahead until previous step is done")),
@@ -113,13 +113,13 @@ func RenderWizardEntryPage(db *gorm.DB, refreshCreds func() (kitsuHost, botToken
 		html.EscapeString(t(lang, "Guided Setup を開始 →", "Start Guided Setup →")),
 
 		// Quick Setup card
-		html.EscapeString(t(lang, "Setup Status（状態確認）", "Setup Status (Status Overview)")),
-		html.EscapeString(t(lang, "現在のセットアップ状況と準備状態を確認します。Guided Setup の代わりではなく、状態確認用の画面です。", "Check current setup status and readiness. This does not replace Guided Setup; it is a status overview screen.")),
+		html.EscapeString(t(lang, "Setup Status（状態確認用）", "Setup Status (Secondary status overview)")),
+		html.EscapeString(t(lang, "現在のセットアップ状況と準備状態を確認する画面です。Guided Setup の代わりではなく、状態確認や見直し向けの補助画面です。", "Use this screen to check current setup status and readiness. It does not replace Guided Setup; it is a secondary screen for status checks and review.")),
 		html.EscapeString(t(lang, "8つの完了条件をカードで確認", "View all 8 completion conditions as cards")),
 		html.EscapeString(t(lang, "現在どこが未完了かを確認できる", "Shows what is still incomplete right now")),
 		html.EscapeString(t(lang, "自動セットアップは行わず、必要に応じて Guided Setup や Manual Setup へ進む", "Does not perform automatic setup actions; continue to Guided Setup or Manual Setup when needed")),
 		withLang("/bot/setup-wizard?mode=quick", r),
-		html.EscapeString(t(lang, "Setup Status を開く →", "Open Setup Status →")),
+		html.EscapeString(t(lang, "Setup Status を確認 →", "Check Setup Status →")),
 	)
 	return adminPage(lang, t(lang, "KitsuSync セットアップ", "KitsuSync Setup"), r, body)
 }
