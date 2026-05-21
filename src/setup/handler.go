@@ -36,6 +36,36 @@ type createdSetupChannel struct {
 	Name string
 }
 
+func cleanupDiscordArtifactsAfterDBFailure(categoryID, botToken string, channels []createdSetupChannel, res *SetupResult) (hadCleanupError bool) {
+	res.warn("database transaction failed after Discord provisioning; attempting Discord cleanup")
+	slog.Warn("Project setup attempting Discord cleanup after database failure", "createdChannels", len(channels), "hasCategory", categoryID != "")
+
+	for i := len(channels) - 1; i >= 0; i-- {
+		ch := channels[i]
+		if ch.ID == "" {
+			continue
+		}
+		if err := DeleteChannel(ch.ID, botToken); err != nil {
+			hadCleanupError = true
+			res.warn(fmt.Sprintf("cleanup failed for #%s: %v", ch.Name, err))
+			slog.Warn("Project setup cleanup could not delete Discord channel", "channelName", ch.Name, "channelID", ch.ID, "err", err)
+		} else {
+			res.ok("rolled back channel: #" + ch.Name)
+		}
+	}
+	if categoryID != "" {
+		if err := DeleteChannel(categoryID, botToken); err != nil {
+			hadCleanupError = true
+			res.warn("cleanup failed for Discord category: " + err.Error())
+			slog.Warn("Project setup cleanup could not delete Discord category", "categoryID", categoryID, "err", err)
+		} else {
+			res.ok("rolled back Discord category")
+		}
+	}
+
+	return hadCleanupError
+}
+
 func cleanupSetupArtifacts(kitsuProjectID, categoryID, botToken string, channels []createdSetupChannel, db *gorm.DB, res *SetupResult) {
 	for i := len(channels) - 1; i >= 0; i-- {
 		ch := channels[i]
@@ -228,9 +258,15 @@ func RunProjectSetup(kitsuProjectID, projectName, projectType, language, kitsuHo
 		return nil
 	}); txErr != nil {
 		res.fail("Discord setup succeeded but database transaction failed: " + txErr.Error())
-		res.fail("Discord channels were NOT deleted — fix the DB issue, then delete this project from Discord manually before retrying.")
-		res.SafeToRetry = false
-		slog.Error("Project setup database transaction failed", "projectName", projectName, "kitsuProjectID", kitsuProjectID, "duration", time.Since(dbStart).String(), "err", txErr)
+		cleanupHadErrors := cleanupDiscordArtifactsAfterDBFailure(categoryID, botToken, createdChannels, &res)
+		if cleanupHadErrors {
+			res.fail("automatic Discord cleanup had warnings; verify Discord resources manually before retrying.")
+			res.SafeToRetry = false
+		} else {
+			res.ok("automatic Discord cleanup completed")
+			res.SafeToRetry = true
+		}
+		slog.Error("Project setup database transaction failed", "projectName", projectName, "kitsuProjectID", kitsuProjectID, "duration", time.Since(dbStart).String(), "cleanupHadErrors", cleanupHadErrors, "err", txErr)
 		return
 	}
 	slog.Info("Project setup database records persisted", "projectName", projectName, "kitsuProjectID", kitsuProjectID, "webhookCount", len(webhooksToSave), "duration", time.Since(dbStart).String())
