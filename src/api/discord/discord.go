@@ -187,12 +187,17 @@ func localizedStatusTransitionMessage(prev, current, lang string) string {
 		if normalizeNotificationLang(lang) == "en" {
 			return "Completed after revision"
 		}
-		return "修正対応が完了しました"
+		return "✅ 作業完了・承認されました"
 	case "WFA->RETAKE":
 		if normalizeNotificationLang(lang) == "en" {
 			return "Review requested additional changes"
 		}
-		return "レビューで追加修正が入りました"
+		return "🔁 リテイクが入りました"
+	case "WFA->WIP":
+		if normalizeNotificationLang(lang) == "en" {
+			return "Returned to rework"
+		}
+		return "🛠 修正作業に戻りました"
 	case "WFA->READY":
 		if normalizeNotificationLang(lang) == "en" {
 			return "Review is complete. Ready for the next step"
@@ -207,32 +212,42 @@ func localizedStatusTransitionMessage(prev, current, lang string) string {
 		if normalizeNotificationLang(lang) == "en" {
 			return "Completed without additional work"
 		}
-		return "追加作業なしで完了しました"
+		return "✅ 作業完了・承認されました"
 	case "WIP->WFA":
 		if normalizeNotificationLang(lang) == "en" {
 			return "Ready for review"
 		}
-		return "チェック可能な状態になりました"
+		return "📩 チェック依頼が送られました"
 	case "WFA->DONE":
 		if normalizeNotificationLang(lang) == "en" {
 			return "Final review is complete"
 		}
-		return "最終確認が完了しました"
+		return "🎉 最終承認されました！お疲れ様でした"
 	case "RETAKE->WIP":
 		if normalizeNotificationLang(lang) == "en" {
 			return "Revision work has started"
 		}
-		return "修正作業を開始しました"
+		return "🛠 リテイク対応を開始しました"
 	case "WIP->RETAKE":
 		if normalizeNotificationLang(lang) == "en" {
 			return "A retake was requested"
 		}
-		return "リテイクが入りました"
+		return "🔁 リテイクが入りました"
 	case "TODO->WIP":
 		if normalizeNotificationLang(lang) == "en" {
 			return "Work has started"
 		}
-		return "作業を開始しました"
+		return "🚀 作業を開始しました"
+	case "NONE->WIP":
+		if normalizeNotificationLang(lang) == "en" {
+			return "Work has started"
+		}
+		return "🚀 作業を開始しました"
+	case "TODO->DONE", "NONE->DONE", "WIP->DONE":
+		if normalizeNotificationLang(lang) == "en" {
+			return "Work completed and approved"
+		}
+		return "✅ 作業完了・承認されました"
 	default:
 		return ""
 	}
@@ -764,4 +779,3 @@ func parseTaskTemplate(tplFilePath string, data Template) string {
 	t.Execute(output, data)
 	return strings.TrimSpace(output.String())
 }
-
