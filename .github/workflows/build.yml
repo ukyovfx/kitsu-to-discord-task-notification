@@ -35,7 +35,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          pattern='â€E|ã‚|â”|â†|èª|æ–|æ—|å|ã'
+          pattern=$'\u7AB6\u30FB|\u7E67|\u7B0F|\u7ACA|\u96B1|\u8B41|\u8B4C|\u873F|\u7E3A'
 
           tmp="$(mktemp)"
           cleanup() { rm -f "$tmp"; }
