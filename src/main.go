@@ -793,7 +793,7 @@ func main() {
 
 	token := basicauth.AuthForJWTToken(kitsuHostname+"api/auth/login", kitsuEmail, kitsuPassword)
 	if token == "" {
-		slog.Fatal("Initial Kitsu authentication failed 窶・check hostname/email/password in conf.toml or /bot/admin/bot")
+		slog.Fatal("Initial Kitsu authentication failed: check hostname/email/password in conf.toml or /bot/admin/bot")
 		os.Exit(1)
 	}
 	os.Setenv("KitsuJWTToken", token)
@@ -812,7 +812,7 @@ func main() {
 		os.Setenv("KITSU_HOSTNAME", h) // Keep hostname env in sync with runtime credentials.
 		newToken := basicauth.AuthForJWTToken(h+"api/auth/login", e, p)
 		if newToken == "" {
-			slog.Warn("Kitsu token refresh failed 窶・keeping previous token until next cycle")
+			slog.Warn("Kitsu token refresh failed: keeping previous token until next cycle")
 			return
 		}
 		os.Setenv("KitsuJWTToken", newToken)
@@ -915,7 +915,7 @@ func main() {
 				os.Setenv("KitsuJWTToken", newToken)
 				slog.Info("Kitsu reconnected via admin UI", "hostname", h, "email", e)
 			} else {
-				slog.Warn("Kitsu reconnect failed 窶・check credentials in /bot/admin/bot")
+				slog.Warn("Kitsu reconnect failed: check credentials in /bot/admin/bot")
 			}
 		}
 		mux.HandleFunc(prefix+"/admin/bot", setup.RequireSession(setup.BotHandler(db, kitsuReconnect)))
