@@ -293,7 +293,7 @@ func FilterTasks(data []kitsu.MessagePayload, conf config.Config, db *gorm.DB) {
 			commentChanged := dbResult.CommentUpdatedAt != data[i].LatestComment.Comment.UpdatedAt
 
 			if statusChanged || timestampChanged || commentChanged {
-				// 繧ｳ繝｡繝ｳ繝医・縺ｿ螟牙喧・医せ繝・・繧ｿ繧ｹ繝ｻ繧ｿ繧､繝繧ｹ繧ｿ繝ｳ繝励・蜷後§・峨°縺ｩ縺・°繧定ｨ倬鹸
+				// Mark notifications that only changed comment content.
 				data[i].IsCommentOnly = commentChanged && !statusChanged && !timestampChanged
 				model.UpdateTask(db, data[i].Task.Task.ID, data[i].Task.Task.UpdatedAt, data[i].TaskStatus.TaskStatus.ShortName, data[i].LatestComment.Comment.ID, data[i].LatestComment.Comment.UpdatedAt)
 			} else {
@@ -325,14 +325,14 @@ func FilterTasks(data []kitsu.MessagePayload, conf config.Config, db *gorm.DB) {
 		filtered = append(filtered, data[i])
 	}
 
-	// 笏笏笏 DB 繝吶・繧ｹ縺ｮ繝励Ο繧ｸ繧ｧ繧ｯ繝医Ν繝ｼ繝・ぅ繝ｳ繧ｰ・・setup 縺ｧ菴懈・縺輔ｌ縺溘・繝ｭ繧ｸ繧ｧ繧ｯ繝亥━蜈茨ｼ俄楳笏笏
+	// Route tasks by project/task-type webhook mappings stored in DB.
 	type dbRoute struct {
 		WebhookURL   string
 		TasksPayload []kitsu.MessagePayload
 		RouteLabels  map[string]struct{}
 	}
 	stats := notificationRouteStats{}
-	dbRoutes := make(map[string]*dbRoute) // webhookURL 竊・tasks
+	dbRoutes := make(map[string]*dbRoute) // webhookURL -> tasks
 	for f := len(filtered) - 1; f >= 0; f-- {
 		projectID := filtered[f].Project.ID
 		taskTypeName := filtered[f].TaskType.TaskType.Name
@@ -356,7 +356,7 @@ func FilterTasks(data []kitsu.MessagePayload, conf config.Config, db *gorm.DB) {
 		}
 	}
 
-	// 笏笏笏 譌｢蟄倥・ conf.toml 繝吶・繧ｹ縺ｮ繝ｫ繝ｼ繝・ぅ繝ｳ繧ｰ・亥ｾ梧婿莠呈鋤・俄楳笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏
+	// Route remaining tasks using legacy conf.toml production webhooks.
 	type TasksByProject struct {
 		ProjectName  string
 		TasksPayload []kitsu.MessagePayload
@@ -383,7 +383,7 @@ func FilterTasks(data []kitsu.MessagePayload, conf config.Config, db *gorm.DB) {
 		}
 	}
 
-	// 繧ｿ繧ｹ繧ｯ繧ｿ繧､繝暦ｼ亥ｷ･遞具ｼ牙挨 Webhook 繝ｫ繝ｼ繝・ぅ繝ｳ繧ｰ
+	// Route tasks configured in task-type webhooks.
 	// Route tasks configured in [[discord.taskTypeWebhooks]] before the fallback route.
 	type tasksByType struct {
 		WebhookURL   string
@@ -414,7 +414,7 @@ func FilterTasks(data []kitsu.MessagePayload, conf config.Config, db *gorm.DB) {
 	}
 
 	if len(filtered) > 0 {
-		// 繝｡繧､繝ｳ Webhook: DB 蜆ｪ蜈茨ｼ亥・蝗槭そ繝・ヨ繧｢繝・・譎ゅ↓蜈ｨ菴馴夂衍繝√Ε繝ｳ繝阪Ν縺瑚・蜍慕匳骭ｲ縺輔ｌ繧具ｼ峨√↑縺代ｌ縺ｰ conf.toml
+		// Fallback route for tasks that did not match DB/conf task routing.
 		_, _, mainWebhook := getDiscordSettings(db, conf)
 		if mainWebhook != "" {
 			stats.MainFallbackSent = len(filtered)
@@ -461,7 +461,7 @@ func DiscordQueueSend(data []kitsu.MessagePayload, conf config.Config, webhookUR
 
 	rl := rate.New(conf.Discord.RequestsPerMinute, time.Minute)
 
-	// 騾∽ｿ｡蜑阪↓譌｢蟄倥・繝｡繝・そ繝ｼ繧ｸID繝ｻWebhookURL繝ｻ繧ｹ繝ｬ繝・ラID繧奪B縺九ｉ蜿朱寔
+	// Cache previous message/thread state for edit/reply behavior.
 	previousMessageIDs := make(map[string]string)
 	previousWebhookURLs := make(map[string]string)
 	previousThreadIDs := make(map[string]string)
@@ -496,7 +496,7 @@ func DiscordQueueSend(data []kitsu.MessagePayload, conf config.Config, webhookUR
 
 			newResults := discord.SendMessageBunch(conf, payload, webhookURL, previousMessageIDs, previousWebhookURLs, previousThreadIDs, projectNotificationLanguages, db)
 
-			// 譁ｰ縺励＞繝｡繝・そ繝ｼ繧ｸID繝ｻ繧ｹ繝ｬ繝・ラID繧奪B縺ｫ菫晏ｭ・+ 逶｣譟ｻ繝ｭ繧ｰ險倬鹸
+			// Persist message/thread IDs and write audit entries.
 			for taskID, res := range newResults {
 				var task kitsu.MessagePayload
 				for _, p := range payload {
@@ -505,7 +505,7 @@ func DiscordQueueSend(data []kitsu.MessagePayload, conf config.Config, webhookUR
 						break
 					}
 				}
-				// 逶｣譟ｻ繝ｭ繧ｰ: 謌仙粥繝ｻ螟ｱ謨怜撫繧上★險倬鹸
+				// Resolve guild ID from project mapping for audit logging.
 				projectGuildID := ""
 				if projectRow := model.FindProjectByKitsuID(db, task.Project.ID); projectRow != nil {
 					projectGuildID = projectRow.DiscordGuildID
@@ -561,7 +561,7 @@ func DiscordQueueSend(data []kitsu.MessagePayload, conf config.Config, webhookUR
 	return data
 }
 
-// 笏笏笏 Kitsu 隱崎ｨｼ諠・ｱ繝倥Ν繝代・ 笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏
+// Kitsu credentials/settings helpers.
 // Prefer DB settings, then environment variables, then conf.toml.
 func getKitsuCreds(db *gorm.DB, conf config.Config) (hostname, email, password string) {
 	hostname = model.GetSetting(db, "kitsu.hostname")
@@ -607,7 +607,7 @@ func getDiscordSettings(db *gorm.DB, conf config.Config) (botToken, guildID, web
 	return
 }
 
-// 笏笏笏 繝昴・繝ｪ繝ｳ繧ｰ謗剃ｻ門宛蠕｡ 笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏
+// Polling concurrency guard.
 // pollMu prevents overlapping polling cycles in the same process.
 var pollMu sync.Mutex
 
@@ -618,7 +618,7 @@ func runOnePoll(conf config.Config, db *gorm.DB) {
 	}
 	defer pollMu.Unlock()
 
-	// 繧｢繧ｯ繝・ぅ繝悶↑繧ｻ繝・す繝ｧ繝ｳ・医Ο繧ｰ繧､繝ｳ荳ｭ縺ｮ邂｡逅・・ｼ峨・ Kitsu JWT 繧貞━蜈医＠縺ｦ菴ｿ逕ｨ縺吶ｋ縲・	// 繝ｭ繧ｰ繧｢繧ｦ繝・or 繧ｻ繝・す繝ｧ繝ｳ譛滄剞蛻・ｌ・・h・牙ｾ後・譌｢蟄倥・迺ｰ蠅・､画焚繝医・繧ｯ繝ｳ縺ｮ縺ｾ縺ｾ繝昴・繝ｪ繝ｳ繧ｰ繧堤ｶ咏ｶ壹・
+	// Poll Kitsu with runtime credentials from DB/env/conf priority.
 	kitsuResponse := MakeKitsuResponse(conf)
 	if conf.Log {
 		slog.Info("Done MakeKitsuResponse")
@@ -806,10 +806,10 @@ func main() {
 	}
 
 	c.AddFunc("@every 1h", func() {
-		// 繧｢繧ｯ繝・ぅ繝悶↑繧ｻ繝・す繝ｧ繝ｳ・医Ο繧ｰ繧､繝ｳ荳ｭ縺ｮ邂｡逅・・ｼ峨・ JWT 縺後≠繧句ｴ蜷医・縺昴ｌ繧剃ｽｿ縺・・		// 1h 縺斐→縺ｮ Basic 隱崎ｨｼ繝ｪ繝輔Ξ繝・す繝･縺ｯ繧ｹ繧ｭ繝・・縺吶ｋ・・WT 縺ｯ繧ｻ繝・す繝ｧ繝ｳ譛牙柑譛滄俣荳ｭ縺ｯ譛牙柑・峨・		// Runtime refresh no longer reuses admin session tokens.
-		// 繧｢繧ｯ繝・ぅ繝悶↑繧ｻ繝・す繝ｧ繝ｳ縺後↑縺代ｌ縺ｰ DB 縺ｮ隱崎ｨｼ諠・ｱ縺ｧ繝ｪ繝輔Ξ繝・す繝･
+		// Refresh runtime JWT every hour from stored runtime credentials.
+		// Runtime refresh no longer reuses admin session tokens.
 		h, e, p := getKitsuCreds(db, conf)
-		os.Setenv("KITSU_HOSTNAME", h) // hostname 縺悟､峨ｏ縺｣縺溷ｴ蜷医ｂ蜿肴丐
+		os.Setenv("KITSU_HOSTNAME", h) // Keep hostname env in sync with runtime credentials.
 		newToken := basicauth.AuthForJWTToken(h+"api/auth/login", e, p)
 		if newToken == "" {
 			slog.Warn("Kitsu token refresh failed 窶・keeping previous token until next cycle")
@@ -840,7 +840,7 @@ func main() {
 		}
 	})
 
-	// HTTP 繧ｵ繝ｼ繝舌・: 繝倥Ν繧ｹ繝√ぉ繝・け + 繝励Ο繧ｸ繧ｧ繧ｯ繝医そ繝・ヨ繧｢繝・・ UI + 邂｡逅・判髱｢
+	// HTTP server: health checks, project setup APIs, and admin UI routes.
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
@@ -906,7 +906,7 @@ func main() {
 			setup.CheckersHandler(db, h)(w, r)
 		}))
 		mux.HandleFunc(prefix+"/admin/drive", setup.RequireSession(setup.DriveHandler(db)))
-		// BotHandler: Kitsu 險ｭ螳壻ｿ晏ｭ伜ｾ後↓蜊ｳ譎ょ・謗･邯壹☆繧九さ繝ｼ繝ｫ繝舌ャ繧ｯ繧呈ｳｨ蜈･
+		// BotHandler persists shared runtime credentials and triggers reconnect.
 		kitsuReconnect := func() {
 			h, e, p := getKitsuCreds(db, conf)
 			os.Setenv("KITSU_HOSTNAME", h)
