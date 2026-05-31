@@ -4,11 +4,11 @@
 [![Docker](https://img.shields.io/badge/runtime-Docker-2496ED)](#quick-start)
 [![License](https://img.shields.io/badge/license-Apache--2.0-green)](#license)
 [![Security Policy](https://img.shields.io/badge/security-policy-important)](#contributing-and-security)
-[![Release](https://img.shields.io/badge/release-v0.1.0-orange)](#v010-release-focus)
+[![Release](https://img.shields.io/badge/release-v0.3.1-orange)](#current-baseline-v031)
 
 KitsuSync is a Kitsu x Discord pipeline bridge for VFX and animation teams. It polls Kitsu, detects task changes, and posts structured Discord notifications with setup and admin tools in the browser.
 
-**v0.1.0 focus:** secure first release, setup integrity, notification visibility, SQLite durability, and OSS onboarding clarity.
+**Current baseline: v0.3.1.** KitsuSync is currently focused on small/mid-size CG/VFX and indie animation team workflows. It is not intended to replace enterprise production tracking systems.
 
 ## Why This Repo Exists
 
@@ -41,33 +41,30 @@ Browser admin UI
   -> /bot/admin
 ```
 
-## v0.1.0 Release Focus
+## Current Baseline (v0.3.1)
 
-- Security hardening for admin auth and runtime credential separation
-- FileBrowser restricted to explicit debug usage
-- Notification routing now surfaces silent-drop conditions in logs
-- Setup flow no longer reports partial Discord provisioning as success
-- SQLite now runs with WAL, busy timeout, and graceful shutdown logging
+- v0.2.0: Setup Wizard/operator clarity and setup-surface role consistency
+- v0.2.1: repository rename/public URL alignment to `ukyovfx/kitsusync`
+- v0.3.0: operational hardening (log redaction, side-effect-free Discord test endpoint, partial-failure cleanup hardening)
+- v0.3.1: Discord notification message UX refinement
 
-See `RELEASE_NOTES_v0.1.0.md` for the full release summary.
+For the latest public state, see `RELEASE_NOTES_v0.3.1.md`. Older release notes remain in this repository for historical context.
 
-## Limitations (v0.1.0)
+## Limitations (Current)
 
-This release supports **single shared bot token** with **project-specific Discord guild assignment**. The following are **not** supported yet:
+Current limitations are intentionally conservative:
 
-- **Multiple bot tokens** — one shared bot token is used across all projects/guilds
-- **Full Discord channel management** — KitsuSync creates channels but cannot delete or restructure them; manual cleanup required
-- **All Kitsu task statuses** — filtering configured for `wfa`, `retake`, `done` and `assign` notifications only; other status transitions are silently dropped
-- **Complete task detail retrieval** — reviews all task fields but does not embed full task description, comments history, or rich metadata
-- **Large-scale queue handling** — no batching optimization for studios with 500+ task updates per minute (may hit Discord rate limits)
-- **Enterprise authentication** — supports Kitsu Basic Auth only (no LDAP, OAuth, SSO)
-- **Kitsu individual task URL links** — embeds generic Kitsu project URL, not direct task permalink (workaround: `/bot/docs/` link points to studio dashboard)
+- Not an enterprise pipeline platform or ShotGrid replacement.
+- Discord resource rollback during setup is best-effort, not full orchestration.
+- Manual repair/admin surfaces are still required for some recovery paths.
+- Setup depends on correct Discord bot permissions and Kitsu reachability.
+- Notification routing remains webhook-based.
+- SQLite is suitable for lightweight/small deployments, not large multi-node scale-out.
 
-Most of these are roadmap items for v0.2.0. For production use, see `docs/SETUP_FOR_STUDIOS.md` and verify routing against your expected notification volume.
+For production use, see `docs/SETUP_FOR_STUDIOS.md` and verify routing and operational load against your expected notification volume.
 
 ## Roadmap
-
-The following items are intentionally **out of v0.1.0 scope** and are tracked for **v0.2.0+** rather than being partially shipped now:
+The following items are tracked as ongoing/post-v0.3.x improvement areas:
 
 - Project-scoped multi-project admin management
 - Admin audit surface in the browser (`/bot/admin/audit`)
@@ -77,13 +74,16 @@ The following items are intentionally **out of v0.1.0 scope** and are tracked fo
 - More explicit setup dry-run and confirmation workflows
 - Screenshot asset completion for public marketing/release pages
 
-If you need these capabilities, keep them in roadmap planning instead of extending the v0.1.0 release branch.
+If you need these capabilities, keep them in roadmap planning as explicit scoped changes rather than ad-hoc local patches.
 
 ## UI Surfaces
 
 - `/bot/login` — admin sign-in
 - `/bot/setup-wizard` — recommended first-time entry point; may first show a setup mode chooser and System Check
 - `/bot/setup` — project/channel management after initial setup or for advanced/manual edits
+- `/bot/admin/setup` — manual setup / diagnostics / repair surface
+- `/bot/admin/bot` — shared bot/runtime credentials
+- `/bot/admin/projects` — project-to-guild assignment
 - `/bot/admin` — operational dashboard: system health, active projects, warnings
 - `/bot/admin/users` — map Kitsu users to Discord IDs for @mentions
 - `/bot/admin/checkers` — map task types to reviewer Discord IDs
@@ -350,7 +350,8 @@ location ~ ^/api/pictures/thumbnails/preview-files/ {
 - Contributor guide: `CONTRIBUTING.md`
 - Security reporting: `SECURITY.md`
 - Changelog: `CHANGELOG.md`
-- Release notes: `RELEASE_NOTES_v0.1.0.md`
+- Latest release notes: `RELEASE_NOTES_v0.3.1.md`
+- Historical release notes: `RELEASE_NOTES_v0.1.0.md` to `RELEASE_NOTES_v0.3.0.md`
 - Screenshot guidance: `screenshots/README.md`
 
 ## License
