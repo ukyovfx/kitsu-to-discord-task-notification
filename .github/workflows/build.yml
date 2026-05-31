@@ -12,6 +12,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Go
         uses: actions/setup-go@v5
@@ -20,6 +22,42 @@ jobs:
 
       - name: Install SQLite build dependencies
         run: sudo apt-get update && sudo apt-get install -y gcc libsqlite3-dev
+
+      - name: Mojibake regression check
+        shell: bash
+        run: |
+          set -euo pipefail
+          pattern='窶・|繧|笏|竊|隱|譁|譌|蜿|縺'
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            base_ref="${{ github.base_ref }}"
+            git fetch --no-tags --depth=1 origin "$base_ref"
+            files="$(git diff --name-only "origin/$base_ref...HEAD")"
+          else
+            files="$(git diff --name-only HEAD~1 HEAD || true)"
+            if [[ -z "$files" ]]; then
+              files="$(git ls-files)"
+            fi
+          fi
+
+          bad=0
+          for f in $files; do
+            [[ -f "$f" ]] || continue
+            [[ "$f" == ".github/workflows/build.yml" ]] && continue
+            if command -v rg >/dev/null 2>&1; then
+              if rg -n "$pattern" "$f"; then
+                bad=1
+              fi
+            else
+              if grep -n -E "$pattern" "$f"; then
+                bad=1
+              fi
+            fi
+          done
+
+          if [[ "$bad" -ne 0 ]]; then
+            echo "Mojibake-like text detected in changed files."
+            exit 1
+          fi
 
       - name: go vet
         run: CGO_ENABLED=1 go vet ./src/...
